@@ -13,26 +13,33 @@ public class NamingServer {
 
     }
 
+    public Map<Integer, String> getNodeMap() {
+        return nodeMap;
+    }
+
     // Voeg een node toe met unieke naam en IP-adres
-    public void addNode(String nodeName, String ipAddress) {
+    public boolean addNode(String nodeName, String ipAddress) {
         int hash = HashingUtil.generateHash(nodeName);
         if (!nodeMap.containsKey(hash)) {
             nodeMap.put(hash, ipAddress);
-
             System.out.println("Node toegevoegd: " + nodeName + " -> " + ipAddress);
+            return true;
         } else {
             System.out.println("Node met deze hash bestaat al!");
+            return false;
         }
     }
 
     // Verwijder een node
-    public void removeNode(String nodeName) {
+    public boolean removeNode(String nodeName) {
         int hash = HashingUtil.generateHash(nodeName);
         if (nodeMap.containsKey(hash)) {
             nodeMap.remove(hash);
             System.out.println("Node verwijderd: " + nodeName);
+            return true;
         } else {
             System.out.println("Node niet gevonden!");
+            return false;
         }
     }
 
