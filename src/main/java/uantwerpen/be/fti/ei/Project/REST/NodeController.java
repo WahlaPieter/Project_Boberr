@@ -7,6 +7,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
+
 import java.util.Map;
 
 @RestController
@@ -81,6 +82,11 @@ public class NodeController {
                 "fileName", fileName,
                 "ipAddress", ipAddress
         ));
+    }
+
+    @GetMapping("/nodemap")
+    public ResponseEntity<?> getNodeMap() {
+        return ResponseEntity.ok(namingServer.getNodeMap());
     }
 
     public static class NodeRegistrationRequest {

@@ -1,9 +1,13 @@
 package uantwerpen.be.fti.ei.Project.NamingServer;
 
+
 import java.io.*;
 import java.util.*;
+import org.springframework.stereotype.Component;
 
+import static uantwerpen.be.fti.ei.Project.storage.JsonService.saveToJson;
 
+@Component
 public class NamingServer {
     private Map<Integer, String> nodeMap;
     private static final String DATA_FILE = "nodes.json";
@@ -11,6 +15,9 @@ public class NamingServer {
     public NamingServer() {
         this.nodeMap = new TreeMap<>(); // Gesorteerde map voor efficiënte zoekopdrachten
 
+    }
+    public void saveNodeMap(){
+        saveToJson(nodeMap);
     }
 
     public Map<Integer, String> getNodeMap() {
@@ -22,6 +29,7 @@ public class NamingServer {
         int hash = HashingUtil.generateHash(nodeName);
         if (!nodeMap.containsKey(hash)) {
             nodeMap.put(hash, ipAddress);
+            saveNodeMap();
             System.out.println("Node toegevoegd: " + nodeName + " -> " + ipAddress);
             return true;
         } else {
@@ -35,6 +43,7 @@ public class NamingServer {
         int hash = HashingUtil.generateHash(nodeName);
         if (nodeMap.containsKey(hash)) {
             nodeMap.remove(hash);
+            saveNodeMap();
             System.out.println("Node verwijderd: " + nodeName);
             return true;
         } else {
