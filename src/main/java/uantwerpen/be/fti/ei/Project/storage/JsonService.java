@@ -14,7 +14,6 @@ public class JsonService {
     private static final String FILE_PATH = "nodes.json";
     private static final Logger logger = Logger.getLogger(JsonService.class.getName());
 
-    // ** Methode om nodeMap op te slaan als JSON **
     public static void saveToJson(Map<Integer, String> nodeMap) {
         try (FileWriter file = new FileWriter(FILE_PATH)) {
             file.write("{\n");
@@ -28,9 +27,9 @@ public class JsonService {
                 file.write("\n");
             }
             file.write("}\n");
-            System.out.println("Data opgeslagen in " + FILE_PATH);
+            System.out.println("Data stored in " + FILE_PATH);
         } catch (IOException e) {
-            logger.log(Level.SEVERE, "Fout bij opslaan van JSON-bestand", e);
+            logger.log(Level.SEVERE, "Error with saving JSON-file", e);
         }
     }
 
@@ -53,14 +52,12 @@ public class JsonService {
     }
 
 
-    // ** Methode om JSON te laden en terug te geven als Map **
     public static Map<Integer, String> loadFromJson() {
         Map<Integer, String> nodeMap = new java.util.TreeMap<>();
         File file = new File(FILE_PATH);
 
-        // ** Als bestand niet bestaat, return lege map **
         if (!file.exists() || file.length() == 0) {
-            System.out.println("Geen bestaand JSON-bestand gevonden, lege map geladen.");
+            System.out.println("No existing JSON-File found, loaded empty map.");
             return nodeMap;
         }
 
@@ -77,9 +74,9 @@ public class JsonService {
                     }
                 }
             }
-            System.out.println("Data geladen uit " + FILE_PATH);
+            System.out.println("Data loaded out " + FILE_PATH);
         } catch (IOException | NumberFormatException e) {
-            logger.log(Level.WARNING, "Fout bij laden van JSON-bestand", e);
+            logger.log(Level.WARNING, "Error with loading JSON-file", e);
         }
         return nodeMap;
     }
