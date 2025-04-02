@@ -57,31 +57,38 @@ public class NodeController {
         }
     }
 
+    // Store a file (hash-based assignment)
+    @PostMapping("/files/{fileName}")
+    public ResponseEntity<?> storeFile(@PathVariable String fileName) {
+        boolean success = namingServer.storeFile(fileName);
+        if (success) {
+            String ip = namingServer.findFileLocation(fileName);
+            return ResponseEntity.ok(Map.of(
+                    "fileName", fileName,
+                    "ipAddress", ip,
+                    "status", "Stored on node"
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(Map.of(
+                    "error", "No nodes available"
+            ));
+        }
+    }
+
+    // Lookup a file's location
     @GetMapping("/files/{fileName}")
     public ResponseEntity<?> findFileLocation(@PathVariable String fileName) {
-        // Check if nodes are available
-        if (namingServer.getNodeMap().isEmpty()) {
-            throw new ResponseStatusException(
-                    HttpStatus.SERVICE_UNAVAILABLE,
-                    "No nodes available in the system"
-            );
+        String ip = namingServer.findFileLocation(fileName);
+        if (ip != null) {
+            return ResponseEntity.ok(Map.of(
+                    "fileName", fileName,
+                    "ipAddress", ip
+            ));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
+                    "error", "File not found"
+            ));
         }
-
-        // Perform lookup
-        String ipAddress = namingServer.findFileLocation(fileName);
-
-        // Handle missing file location
-        if (ipAddress == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.NOT_FOUND,
-                    "File location could not be determined for: " + fileName
-            );
-        }
-
-        return ResponseEntity.ok(Map.of(
-                "fileName", fileName,
-                "ipAddress", ipAddress
-        ));
     }
 
     @GetMapping("/nodemap")
