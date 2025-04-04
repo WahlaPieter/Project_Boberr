@@ -5,6 +5,9 @@ import java.util.*;
 import org.springframework.stereotype.Component;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
 
+import jakarta.annotation.PostConstruct;
+import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
+
 import static uantwerpen.be.fti.ei.Project.storage.JsonService.saveStoredFiles;
 import static uantwerpen.be.fti.ei.Project.storage.JsonService.saveToJson;
 
@@ -145,4 +148,12 @@ public class NamingServer {
         }
         saveFileMap();
     }
+
+    @PostConstruct
+    public void startMulticastReceiver() {
+        Thread multicastThread = new Thread(new MulticastReceiver(this));
+        multicastThread.setDaemon(true);
+        multicastThread.start();
+    }
+
 }
