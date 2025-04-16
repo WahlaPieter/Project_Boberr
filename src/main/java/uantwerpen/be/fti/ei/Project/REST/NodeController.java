@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
+import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
-
 
 import java.util.Map;
 
@@ -14,13 +14,14 @@ import java.util.Map;
 @RequestMapping("/api")
 public class NodeController {
     private final NamingServer namingServer;
+    private final Node node;
 
     @Autowired
-    public NodeController(NamingServer namingServer) {
+    public NodeController(NamingServer namingServer, Node node) {
         this.namingServer = namingServer;
+        this.node = node;
     }
 
-    // Add a node to the system
     @PostMapping("/nodes")
     public ResponseEntity<?> addNode(@RequestBody NodeRegistrationRequest request) {
         boolean success = namingServer.addNode(request.getNodeName(), request.getIpAddress());
@@ -39,7 +40,6 @@ public class NodeController {
         }
     }
 
-    // Remove a node from the system
     @DeleteMapping("/nodes/{nodeId}")
     public ResponseEntity<?> removeNode(@PathVariable String nodeId) {
         boolean success = namingServer.removeNode(nodeId);
@@ -57,7 +57,6 @@ public class NodeController {
         }
     }
 
-    // Store a file (hash-based assignment)
     @PostMapping("/files/{fileName}")
     public ResponseEntity<?> storeFile(@PathVariable String fileName) {
         boolean success = namingServer.storeFile(fileName);
@@ -75,7 +74,6 @@ public class NodeController {
         }
     }
 
-    // Lookup a file's location
     @GetMapping("/files/{fileName}")
     public ResponseEntity<?> findFileLocation(@PathVariable String fileName) {
         String ip = namingServer.findFileLocation(fileName);
@@ -100,20 +98,28 @@ public class NodeController {
         private String nodeName;
         private String ipAddress;
 
-        public String getNodeName() {
-            return nodeName;
-        }
+        public String getNodeName() { return nodeName; }
+        public void setNodeName(String nodeName) { this.nodeName = nodeName; }
 
-        public void setNodeName(String nodeName) {
-            this.nodeName = nodeName;
-        }
-
-        public String getIpAddress() {
-            return ipAddress;
-        }
-
-        public void setIpAddress(String ipAddress) {
-            this.ipAddress = ipAddress;
-        }
+        public String getIpAddress() { return ipAddress; }
+        public void setIpAddress(String ipAddress) { this.ipAddress = ipAddress; }
     }
+
+    @PostMapping("/bootstrap/update")
+    public ResponseEntity<?> updateRingInfo(@RequestBody Map<String, Integer> payload) {
+        int updatedField = payload.get("updatedField");
+        int nodeID = payload.get("nodeID");
+
+        if (updatedField == 1) {
+            node.setPreviousID(nodeID);
+        } else if (updatedField == 2) {
+            node.setNextID(nodeID);
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "status", "Updated " + (updatedField == 1 ? "previousID" : "nextID"),
+                "with", nodeID
+        ));
+    }
+
 }
