@@ -3,15 +3,14 @@ package uantwerpen.be.fti.ei.Project.NamingServer;
 import java.io.IOException;
 import java.util.*;
 import org.springframework.stereotype.Component;
+import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
-import jakarta.annotation.PostConstruct;
-import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
 import static uantwerpen.be.fti.ei.Project.storage.JsonService.saveStoredFiles;
 import static uantwerpen.be.fti.ei.Project.storage.JsonService.saveToJson;
 
 @Component
 public class NamingServer {
-    private TreeMap<Integer, String> nodeMap = new TreeMap<>();
+    private TreeMap<Integer, Node> nodeMap = new TreeMap<>();
     private Map<String, Set<String>> storedFiles = new HashMap<>();
 
 
@@ -23,34 +22,54 @@ public class NamingServer {
         saveStoredFiles(storedFiles);
     }
 
-    public Map<Integer, String> getNodeMap() {
+    public Map<Integer, Node> getNodeMap() {
         return nodeMap;
     }
 
-    // When adding a node, we add it and then reassign files based on the new hash ring
     public boolean addNode(String nodeName, String ipAddress) {
         int hash = HashingUtil.generateHash(nodeName);
-        if (!nodeMap.containsKey(hash)) {
-            nodeMap.put(hash, ipAddress);
-            saveNodeMap();
-            // Initialize file storage for the new node
-            storedFiles.put(ipAddress, new HashSet<>());
+        if (nodeMap.containsKey(hash)) return false;
 
-            // Reassign all files according to the new ring
-            redistributeFiles();
-            saveFileMap();
+        Node newNode = new Node();
+        newNode.setNodeName(nodeName);
+        newNode.setIpAddress(ipAddress);
+        newNode.setCurrentID(hash);
+        nodeMap.put(hash, newNode);
 
-            System.out.println("Node added: " + nodeName + " -> " + ipAddress);
-            return true;
-        } else {
-            System.out.println("Node already exists!");
-            return false;
+        saveNodeMap();
+        updateRingPointers();
+        storedFiles.put(ipAddress, new HashSet<>());
+        redistributeFiles();
+        saveFileMap();
+
+        System.out.println("Node added: " + nodeName + " -> " + ipAddress);
+        return true;
+    }
+
+
+    private void updateRingPointers() {
+        if (nodeMap.isEmpty()) return;
+
+        List<Integer> sortedHashes = new ArrayList<>(nodeMap.keySet());
+        Collections.sort(sortedHashes);
+
+        int n = sortedHashes.size();
+        for (int i = 0; i < n; i++) {
+            int hash  = sortedHashes.get(i);
+            int prev  = sortedHashes.get((i - 1 + n) % n);  // wrap‐around
+            int next  = sortedHashes.get((i + 1) % n);      // wrap‐around
+
+            Node node  = nodeMap.get(hash);
+            node.updatePreviousIDIntern(prev);
+            node.updateNextIDIntern(next);
         }
     }
 
+
+
     public boolean removeNode(String nodeName) {
         int hash = HashingUtil.generateHash(nodeName);
-        String ip = nodeMap.get(hash);
+        String ip = nodeMap.get(hash).getIpAddress();
         if (nodeMap.containsKey(hash)) {
             nodeMap.remove(hash);
             storedFiles.remove(ip);
@@ -93,30 +112,15 @@ public class NamingServer {
     private String findResponsibleNode(int fileHash) {
         if (nodeMap.isEmpty()) return null;
 
-        String bestNodeIp = null;
-        int minDifference = Integer.MAX_VALUE;
-
-        // Iterate over all nodes in the hash ring
-        for (Map.Entry<Integer, String> entry : nodeMap.entrySet()) {
-            int nodeHash = entry.getKey();
-            int difference = fileHash - nodeHash;
-
-            // We select the node with the smallest non-negative difference
-            if (difference >= 0 && difference < minDifference) {
-                minDifference = difference;
-                bestNodeIp = entry.getValue();
-            }
+        Integer ceilingKey = nodeMap.ceilingKey(fileHash);
+        if (ceilingKey != null) {
+            return nodeMap.get(ceilingKey).getIpAddress();
+        } else {
+            // Wrap-around to the first node
+            return nodeMap.firstEntry().getValue().getIpAddress();
         }
-
-        // If no node has a hash less than or equal to the file hash, wrap-around:
-        if (bestNodeIp == null) {
-            return nodeMap.lastEntry().getValue();
-        }
-        return bestNodeIp;
     }
 
-    // Reassign all files over the updated ring. For each file, determine its new responsible node,
-    // and then place it there while ensuring it is removed from any previous node.
     private void redistributeFiles() {
         Map<String, Set<String>> filesToMove = new HashMap<>();
 

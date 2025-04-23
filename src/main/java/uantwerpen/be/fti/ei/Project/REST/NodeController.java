@@ -4,7 +4,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
@@ -94,6 +93,43 @@ public class NodeController {
         return ResponseEntity.ok(namingServer.getNodeMap());
     }
 
+    @PutMapping("/nodes/{hash}")
+    public ResponseEntity<?> updateNode(
+            @PathVariable int hash,
+            @RequestBody NodeUpdateRequest request
+    ) {
+        Node node = namingServer.getNodeMap().get(hash);
+        if (node != null) {
+            node.setPreviousID(request.getPreviousID());
+            node.setNextID(request.getNextID());
+            namingServer.saveNodeMap();
+            return ResponseEntity.ok().build();
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    public static class NodeUpdateRequest {
+        private int previousID;
+        private int nextID;
+
+        public int getNextID() {
+            return nextID;
+        }
+
+        public void setNextID(int nextID) {
+            this.nextID = nextID;
+        }
+
+        public int getPreviousID() {
+            return previousID;
+        }
+
+        public void setPreviousID(int previousID) {
+            this.previousID = previousID;
+        }
+    }
+
     public static class NodeRegistrationRequest {
         private String nodeName;
         private String ipAddress;
@@ -116,10 +152,18 @@ public class NodeController {
             node.setNextID(nodeID);
         }
 
+        String statusMessage;
+        if (updatedField == 1) {
+            statusMessage = "Updated previousID";
+        } else {
+            statusMessage = "Updated nextID";
+        }
+
         return ResponseEntity.ok(Map.of(
-                "status", "Updated " + (updatedField == 1 ? "previousID" : "nextID"),
+                "status", statusMessage,
                 "with", nodeID
         ));
+
     }
 
 }

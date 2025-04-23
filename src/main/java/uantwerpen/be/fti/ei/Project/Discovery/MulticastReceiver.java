@@ -9,7 +9,6 @@ import java.net.MulticastSocket;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
-
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 
@@ -38,6 +37,9 @@ public class MulticastReceiver implements Runnable {
                 if (parts.length == 2) {
                     String nodeName = parts[0];
                     String ipAddress = parts[1];
+                    if (nodeName.equals(this.node.getNodeName())) {
+                        continue;
+                    }
                     int newNodeHash = HashingUtil.generateHash(nodeName);
 
                     int currentID = node.getCurrentID();
@@ -50,17 +52,20 @@ public class MulticastReceiver implements Runnable {
                     response.put("newNodeID", newNodeHash);
                     response.put("currentID", currentID);
 
-                    // Check: should this node become the previous or next of the new one?
                     if (isBetween(prevID, newNodeHash, currentID)) {
-                        node.setPreviousID(newNodeHash);
-                        response.put("updatedField", 1); // 1 = previous
-                        updated = true;
+                        if (node.getPreviousID() != newNodeHash) {
+                            node.setPreviousID(newNodeHash);
+                            response.put("updatedField", 1);
+                            updated = true;
+                        }
                     }
 
                     if (isBetween(currentID, newNodeHash, nextID)) {
-                        node.setNextID(newNodeHash);
-                        response.put("updatedField", 2); // 2 = next
-                        updated = true;
+                        if (node.getNextID() != newNodeHash) {
+                            node.setNextID(newNodeHash);
+                            response.put("updatedField", 2);
+                            updated = true;
+                        }
                     }
 
                     if (updated) {
@@ -98,7 +103,7 @@ public class MulticastReceiver implements Runnable {
                 os.flush();
             }
 
-            con.getResponseCode(); // trigger request
+            con.getResponseCode();
         } catch (IOException e) {
             System.err.println("⚠️ Failed to send unicast response to " + ip);
         }
