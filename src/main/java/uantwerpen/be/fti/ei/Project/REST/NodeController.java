@@ -39,21 +39,43 @@ public class NodeController {
         }
     }
 
-    @DeleteMapping("/nodes/{nodeId}")
-    public ResponseEntity<?> removeNode(@PathVariable String nodeId) {
-        boolean success = namingServer.removeNode(nodeId);
-
-        if (success) {
-            return ResponseEntity.ok().body(Map.of(
-                    "status", "Node removed",
-                    "nodeId", nodeId
-            ));
-        } else {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of(
-                    "error", "Node not found",
-                    "nodeId", nodeId
-            ));
+    @DeleteMapping("/nodes/{hash}")
+    public ResponseEntity<?> removeNodeById(@PathVariable int hash) {
+        boolean success = namingServer.removeNode(hash);
+        if (success){
+            return ResponseEntity.ok().build();
         }
+        else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PutMapping("/nodes/{hash}/previous")
+    public ResponseEntity<?> updateNodePreviousID(
+            @PathVariable int hash,
+            @RequestBody int newPreviousID
+    ) {
+        Node node = namingServer.getNodeMap().get(hash);
+        if (node != null) {
+            node.setPreviousID(newPreviousID);
+            namingServer.saveNodeMap();
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    @PutMapping("/nodes/{hash}/next")
+    public ResponseEntity<?> updateNodeNextID(
+            @PathVariable int hash,
+            @RequestBody int newNextID
+    ) {
+        Node node = namingServer.getNodeMap().get(hash);
+        if (node != null) {
+            node.setNextID(newNextID);
+            namingServer.saveNodeMap();
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.notFound().build();
     }
 
     @PostMapping("/files/{fileName}")

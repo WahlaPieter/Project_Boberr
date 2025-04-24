@@ -65,21 +65,40 @@ public class NamingServer {
         }
     }
 
+    public boolean removeNode(int hash) {
+        Node nodeToRemove = nodeMap.get(hash);
+        if (nodeToRemove == null) return false;
 
+        Node prevNode = nodeMap.get(nodeToRemove.getPreviousID());
+        Node nextNode = nodeMap.get(nodeToRemove.getNextID());
 
-    public boolean removeNode(String nodeName) {
-        int hash = HashingUtil.generateHash(nodeName);
-        String ip = nodeMap.get(hash).getIpAddress();
-        if (nodeMap.containsKey(hash)) {
-            nodeMap.remove(hash);
-            storedFiles.remove(ip);
-            saveNodeMap();
-            saveFileMap();
-            System.out.println("Node deleted: " + nodeName);
-            return true;
-        } else {
-            System.out.println("Node not found!");
-            return false;
+        if (prevNode != null) {
+            prevNode.setNextID(nodeToRemove.getNextID());
+            nodeMap.put(prevNode.getCurrentID(), prevNode);
+        }
+
+        if (nextNode != null) {
+            nextNode.setPreviousID(nodeToRemove.getPreviousID());
+            nodeMap.put(nextNode.getCurrentID(), nextNode);
+        }
+
+        nodeMap.remove(hash);
+        storedFiles.remove(nodeToRemove.getIpAddress());
+        saveNodeMap();
+        saveFileMap();
+        redistributeFiles();
+
+        System.out.println("Node removed: " + hash);
+        return true;
+    }
+
+    public String getNodeIp(int hash) {
+        Node node = nodeMap.get(hash);
+        if (node != null){
+            return node.getIpAddress();
+        }
+        else {
+            return null;
         }
     }
 

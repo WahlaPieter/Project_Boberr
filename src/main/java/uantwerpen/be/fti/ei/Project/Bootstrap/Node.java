@@ -1,6 +1,7 @@
 package uantwerpen.be.fti.ei.Project.Bootstrap;
 
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,7 @@ import org.springframework.web.client.RestTemplate;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastSender;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
+import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 import uantwerpen.be.fti.ei.Project.REST.NodeController;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
@@ -21,8 +23,41 @@ public class Node {
     private int nextID;
     private String nodeName;
     private String ipAddress;
+    @Autowired
+    private NamingServer namingServer;
 
     public Node(){
+        Runtime.getRuntime().addShutdownHook(new Thread(this::gracefulShutdown));
+    }
+
+    private void gracefulShutdown() {
+        System.out.println("🛑 Shutting down node: " + nodeName);
+        updateNeighbors();
+        notifyNamingServerForRemoval();
+    }
+
+    private void notifyNamingServerForRemoval() {
+        RestTemplate rest = new RestTemplate();
+        String url = "http://localhost:8080/api/nodes/" + currentID;
+        rest.delete(url);
+    }
+
+    private void updateNeighbors() {
+        RestTemplate rest = new RestTemplate();
+
+        if (previousID != currentID) {
+            rest.put(
+                    "http://localhost:8080/api/nodes/" + previousID + "/next",
+                    nextID
+            );
+        }
+
+        if (nextID != currentID) {
+            rest.put(
+                    "http://localhost:8080/api/nodes/" + nextID + "/previous",
+                    previousID
+            );
+        }
     }
 
     @PostConstruct
