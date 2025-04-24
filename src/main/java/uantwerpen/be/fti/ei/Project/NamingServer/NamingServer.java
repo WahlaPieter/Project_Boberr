@@ -2,6 +2,8 @@ package uantwerpen.be.fti.ei.Project.NamingServer;
 
 import java.io.IOException;
 import java.util.*;
+
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Component;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
@@ -13,7 +15,10 @@ public class NamingServer {
     private TreeMap<Integer, Node> nodeMap = new TreeMap<>();
     private Map<String, Set<String>> storedFiles = new HashMap<>();
 
-
+    @PostConstruct
+    public void init() {
+        startFailureDetection();
+    }
     public void saveNodeMap(){
         saveToJson(nodeMap);
     }
@@ -174,4 +179,83 @@ public class NamingServer {
         }
         saveFileMap();
     }
+
+    public void handleNodeFailure(int failedHash, String failedIp) {
+
+        if (!nodeMap.containsKey(failedHash)) {
+            System.out.println("node not found in the map: ");
+            return;
+        }
+
+        // Find the previous and next nodes
+        Map.Entry<Integer, Node> previousEntry = nodeMap.lowerEntry(failedHash);
+        Map.Entry<Integer, Node> nextEntry = nodeMap.higherEntry(failedHash);
+
+        // if failed node was first or last => the circular ring
+        if (previousEntry == null) {
+            previousEntry = nodeMap.lastEntry();
+        }
+        if (nextEntry == null) {
+            nextEntry = nodeMap.firstEntry();
+        }
+
+        // update neighbours
+        if (previousEntry != null && nextEntry != null) {
+            Node previousNode = previousEntry.getValue();
+            Node nextNode = nextEntry.getValue();
+
+            // Update previous node's next pointer
+            previousNode.setNextID(nextEntry.getKey());
+
+            // Update next node's previous pointer
+            nextNode.setPreviousID(previousEntry.getKey());
+
+            System.out.println("Updated neighbors: " + previousNode.getIpAddress() +
+                    " and " + nextNode.getIpAddress() + " about failure of " + failedIp);
+        }
+
+        // the failed node needs to be removed
+        nodeMap.remove(failedHash);
+        storedFiles.remove(failedIp);
+        saveNodeMap();
+        saveFileMap();
+        System.out.println("Node failure handled for IP: " + failedIp + " (Hash: " + failedHash + ")");
+
+    }
+
+    public boolean pingNode(String ipAddress) {
+        try {
+            Process process = Runtime.getRuntime().exec("ping -c 1" + ipAddress);
+            int returnval = process.waitFor();
+            return returnval == 0;
+        }catch (Exception e) {
+            return false;
+        }
+    }
+
+    public void startFailureDetection(){
+        Thread failureDetectionThread = new Thread(() -> {
+            while (true){
+                try {
+                    // Make a copy to avoid concurrent modification
+                    Map<Integer, Node> nodesCopy = new HashMap<>(nodeMap);
+                    // this will check each node periodically
+                    for (Map.Entry<Integer, Node> entry : nodesCopy.entrySet()) {
+                        Node node = entry.getValue();
+                        if (!pingNode(node.getIpAddress())) {
+                            System.out.println("Node failure detected at IP: " + node.getIpAddress());
+                            handleNodeFailure(entry.getKey(), node.getIpAddress());
+                        }
+                    }
+                    Thread.sleep(30000); // every 30 sec
+                }catch (InterruptedException e){
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+        });
+        failureDetectionThread.setDaemon(true);
+        failureDetectionThread.start();
+    }
+
 }
