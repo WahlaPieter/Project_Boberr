@@ -243,7 +243,7 @@ public class NamingServer {
                     for (Map.Entry<Integer, Node> entry : nodesCopy.entrySet()) {
                         Node node = entry.getValue();
                         if (!pingNode(node.getIpAddress())) {
-                            System.out.println("Node failure detected at IP: " + node.getIpAddress());
+                            System.out.println("Node failure detected at IP: " + node.getNodeName());
                             handleNodeFailure(entry.getKey(), node.getIpAddress());
                         }
                     }

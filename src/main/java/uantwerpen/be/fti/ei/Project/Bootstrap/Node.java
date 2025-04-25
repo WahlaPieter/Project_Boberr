@@ -64,7 +64,7 @@ public class Node {
     public void init() {
         int randomId = ThreadLocalRandom.current().nextInt(1, 1000);
         this.nodeName = "Node-" + randomId;
-        this.ipAddress = "127.0.0.1";
+        this.ipAddress = "127.0.0.2";
 
         this.currentID = HashingUtil.generateHash(nodeName);
         this.previousID = currentID;
