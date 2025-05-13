@@ -62,4 +62,17 @@ public class NamingServerController {
     public Map<Integer, ?> getMap() {
         return namingServer.getNodeMap();
     }
+
+    @PostMapping("/files/report/{ip}")
+    public ResponseEntity<Map<String, String>> reportFiles(@PathVariable String ip, @RequestBody Map<String, Integer> files) {
+        Map<String, String> targets = namingServer.handleFileReport(ip, files); // Toegevoegd in namingserver
+        return ResponseEntity.ok(targets);
+    }
+
+    @DeleteMapping("/files/remove/{ip}/{fileName}")
+    public ResponseEntity<?> removeFile(@PathVariable String ip, @PathVariable String fileName) {
+        namingServer.removeFile(ip, fileName);
+        return ResponseEntity.ok().build();
+    }
+
 }

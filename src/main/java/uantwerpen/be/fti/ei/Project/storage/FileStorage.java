@@ -4,6 +4,9 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.Set;
 
+import java.util.HashSet;
+
+
 public class FileStorage {
     private static final String BASE = "nodes_storage/";
 
@@ -22,5 +25,22 @@ public class FileStorage {
 
     public static boolean fileExists(String ip, String fileName) {
         return Files.exists(Paths.get(BASE + ip + "/" + fileName + ".txt"));
+    }
+
+    public static Set<String> listFiles(String ip) {
+        Set<String> fileNames = new HashSet<>();
+        Path dir = Paths.get(BASE + ip);
+        if (!Files.exists(dir) || !Files.isDirectory(dir)) return fileNames;
+
+        try (DirectoryStream<Path> stream = Files.newDirectoryStream(dir, "*.txt")) {
+            for (Path path : stream) {
+                String name = path.getFileName().toString().replace(".txt", "");
+                fileNames.add(name);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        return fileNames;
     }
 }

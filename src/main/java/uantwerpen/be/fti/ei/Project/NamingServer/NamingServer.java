@@ -28,6 +28,30 @@ public class NamingServer {
         startFailureDetection();
     }
 
+    public synchronized Map<String, String> handleFileReport(String sourceIp, Map<String, Integer> fileHashes) { // Replicatie(Starting)
+        Map<String, String> replicationTargets = new HashMap<>();
+
+        for (Map.Entry<String, Integer> entry : fileHashes.entrySet()) {
+            String fileName = entry.getKey();
+            int fileHash = entry.getValue();
+            String targetIp = findResponsibleNode(fileHash); //Bepaal verantwoordelijke node voor deze file hash
+            if (!sourceIp.equals(targetIp)) {// Alleen repliceren als de verantwoordelijke IP verschilt
+                replicationTargets.put(fileName, targetIp);
+                storedFiles.get(targetIp).add(fileName);// Voeg file toe aan opslagkaart van de target
+            }
+        }
+        saveFileMap(); // Opslaan naar JSON-bestand
+        return replicationTargets;
+    }
+
+    public synchronized void removeFile(String ip, String fileName) {
+        if (storedFiles.containsKey(ip)) {
+            storedFiles.get(ip).remove(fileName);
+            saveFileMap();
+            System.out.println("Bestand verwijderd uit opslag: " + fileName + " op " + ip);
+        }
+    }
+
     public synchronized boolean addNode(String nodeName, String ipAddress) {
         int hash = HashingUtil.generateHash(nodeName);
         if (nodeMap.containsKey(hash)) return false;

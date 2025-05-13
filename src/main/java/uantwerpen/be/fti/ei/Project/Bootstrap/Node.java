@@ -16,6 +16,13 @@ import java.net.InetAddress;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
+import java.io.File;
+import java.util.HashMap;
+
+import uantwerpen.be.fti.ei.Project.Replication.FileTransferClient;
+import uantwerpen.be.fti.ei.Project.Replication.FileTransferServer;
+import uantwerpen.be.fti.ei.Project.Replication.FolderWatcher;
+
 @Component
 @Profile("node")
 public class Node {
@@ -61,6 +68,10 @@ public class Node {
         Map<String, String> payload = Map.of("nodeName", nodeName, "ipAddress", ipAddress);
         rest.postForObject(namingServerUrl + "/api/nodes", payload, Void.class);
         System.out.println(" Geregistreerd bij NamingServer: " + namingServerUrl);
+
+        scanAndReportFiles(); // Bestanden scannen en rapporteren (Replicatie: Starting)
+        new Thread(new FileTransferServer(ipAddress)).start();// Start de TCP-server voor inkomende bestandsoverdrachten
+        new Thread(new FolderWatcher(this, ipAddress)).start();// Start folder watcher om nieuwe/verwijderde bestanden op te sporen
     }
 
     private void gracefulShutdown() {
@@ -107,6 +118,69 @@ public class Node {
             System.err.println(" Fout bij bootstrap naar " + destIp);
         }
     }
+// For replication: Starting
+    private void scanAndReportFiles() {
+        // Pad lokale bestandsmap voor deze node
+        String folderPath = "nodes_storage/" + ipAddress;
+        File folder = new File(folderPath);
+        // Als de folder niet bestaat of geen map is → niks doen
+        if (!folder.exists() || !folder.isDirectory()) return;
+
+        // Map om bestandsnaam → hash op te slaan
+        Map<String, Integer> fileHashes = new HashMap<>();
+
+        // Loop over alle bestanden in de map
+        for (File file : folder.listFiles()) {
+            if (file.isFile()) {
+                String name = file.getName().replace(".txt", "");
+                int hash = HashingUtil.generateHash(name);
+                fileHashes.put(name, hash);
+            }
+        }
+
+        try {
+            String url = namingServerUrl + "/api/files/report/" + ipAddress; // Endpoint van de NamingServer
+            Map<String, String> replicationTargets = rest.postForObject(url, fileHashes, Map.class);// Verstuur POST-request met bestandsnamen en hashes
+            // Als er bestanden zijn die gerepliceerd moeten worden
+            if (replicationTargets != null && !replicationTargets.isEmpty()) {
+                for (Map.Entry<String, String> entry : replicationTargets.entrySet()) {
+                    System.out.println("Bestand " + entry.getKey() + " moet gerepliceerd worden naar " + entry.getValue());
+                    // Bestand echt versturen
+                    FileTransferClient.sendFile(ipAddress, entry.getValue(), entry.getKey());
+                }
+            }
+        } catch (Exception e) { // Indien fout bij rapporteren
+            System.err.println("Fout bij rapporteren aan NamingServer");
+            e.printStackTrace();
+        }
+    }
+
+    // Replication updating
+    public void handleNewFile(String fileName) {
+        Map<String, Integer> singleFile = Map.of(fileName, HashingUtil.generateHash(fileName));
+        try {
+            String url = namingServerUrl + "/api/files/report/" + ipAddress;
+            Map<String, String> response = rest.postForObject(url, singleFile, Map.class);
+            if (response != null && response.containsKey(fileName)) {
+                String targetIp = response.get(fileName);
+                FileTransferClient.sendFile(ipAddress, targetIp, fileName);
+            }
+        } catch (Exception e) {
+            System.err.println("Fout bij verwerken van nieuw bestand");
+            e.printStackTrace();
+        }
+    }
+    // Replication updating
+    public void handleRemovedFile(String fileName) {
+        try {
+            String url = namingServerUrl + "/api/files/remove/" + ipAddress + "/" + fileName;
+            rest.delete(url);
+            System.out.println("Verwijderingsaanvraag verstuurd voor: " + fileName);
+        } catch (Exception e) {
+            System.err.println("Fout bij verwerken van verwijderd bestand");
+            e.printStackTrace();
+        }
+    }
 
     public void updatePrevious(int id) { this.previousID = id; }
     public void updateNext(int id) { this.nextID = id; }
@@ -138,4 +212,7 @@ public class Node {
     public String getIpAddress() {
         return ipAddress;
     }
+
+
+
 }
