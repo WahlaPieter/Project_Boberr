@@ -62,4 +62,27 @@ public class NamingServerController {
     public Map<Integer, ?> getMap() {
         return namingServer.getNodeMap();
     }
+
+    @GetMapping("/replicate")
+    public ResponseEntity<?> getReplicationTarget(@RequestParam int hash) {
+        String ip = namingServer.getNodeForReplication(hash);
+        return ip != null ? ResponseEntity.ok(Map.of("ip", ip)) : ResponseEntity.notFound().build();
+    }
+
+    @PostMapping("/files/replicate")
+    public ResponseEntity<?> registerReplication(
+            @RequestBody Map<String, String> payload) {
+        namingServer.registerFileReplication(
+                payload.get("fileName"),
+                payload.get("ownerIp"),
+                payload.get("replicaIp"));
+        return ResponseEntity.ok().build();
+    }
+    @DeleteMapping("/files/{fileName}/replicas/{replicaIp}")
+    public ResponseEntity<?> removeReplica(
+            @PathVariable String fileName,
+            @PathVariable String replicaIp) {
+        namingServer.removeFileReplica(fileName, replicaIp);
+        return ResponseEntity.ok().build();
+    }
 }

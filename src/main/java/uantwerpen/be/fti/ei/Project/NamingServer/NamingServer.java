@@ -66,8 +66,8 @@ public class NamingServer {
         String ip = findResponsibleNode(fileHash);
         if (ip == null) return false;
         try {
-            FileStorage.storeFile(responsibleIp, fileName, "File content: " + fileName);
-            storedFiles.get(responsibleIp).add(fileName);
+            FileStorage.storeFile(ip, fileName, "Content: " + fileName);
+            storedFiles.get(ip).add(fileName);
             saveFileMap();
             return true;
         } catch (IOException e) {
@@ -173,4 +173,38 @@ public class NamingServer {
     public Map<Integer, Node> getNodeMap() { return nodeMap; }
     public void saveNodeMap() { JsonService.saveToJson(nodeMap); }
     public void saveFileMap() { JsonService.saveStoredFiles(storedFiles); }
+
+    public synchronized String getNodeForReplication(int hash) {
+        if (nodeMap.isEmpty()) return null;
+
+        // Find the node where node.hash < file.hash
+        Map.Entry<Integer, Node> lower = nodeMap.lowerEntry(hash);
+        if (lower == null) {
+            // Wrap around to the highest node
+            lower = nodeMap.lastEntry();
+        }
+
+        // Check if this node would be the owner (edge case)
+        if (lower.getKey() == hash) {
+            return null; // File hash matches node hash - no replication needed
+        }
+
+        return lower.getValue().getIpAddress();
+    }
+
+    public synchronized void registerFileReplication(String fileName, String ownerIp, String replicaIp) {
+        storedFiles.computeIfAbsent(ownerIp, k -> new HashSet<>()).add(fileName);
+        saveFileMap();
+    }
+
+    public synchronized void removeFileReplica(String fileName, String replicaIp) {
+        storedFiles.entrySet().stream()
+                .filter(e -> e.getValue().contains(fileName))
+                .findFirst()
+                .ifPresent(entry -> {
+                    entry.getValue().remove(fileName);
+                    saveFileMap();
+                });
+    }
+
 }
