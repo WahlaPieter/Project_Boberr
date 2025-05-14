@@ -2,70 +2,47 @@ package uantwerpen.be.fti.ei.Project.Bootstrap;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
-import uantwerpen.be.fti.ei.Project.Discovery.MulticastSender;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
+import uantwerpen.be.fti.ei.Project.Discovery.MulticastSender;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
-import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
-import uantwerpen.be.fti.ei.Project.REST.NodeController;
+
+import java.net.InetAddress;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
-
 @Component
+@Profile("node")
 public class Node {
-
     private int currentID;
     private int previousID;
     private int nextID;
     private String nodeName;
     private String ipAddress;
+
+    @Value("${namingserver.url}")
+    private String namingServerUrl;
+
     @Autowired
-    private NamingServer namingServer;
+    private RestTemplate rest;
 
-    public Node(){
+    public Node() {
         Runtime.getRuntime().addShutdownHook(new Thread(this::gracefulShutdown));
-    }
-
-    private void gracefulShutdown() {
-        System.out.println("🛑 Shutting down node: " + nodeName);
-        updateNeighbors();
-        notifyNamingServerForRemoval();
-    }
-
-    private void notifyNamingServerForRemoval() {
-        RestTemplate rest = new RestTemplate();
-        String url = "http://localhost:8080/api/nodes/" + currentID;
-        rest.delete(url);
-    }
-
-    private void updateNeighbors() {
-        RestTemplate rest = new RestTemplate();
-
-        if (previousID != currentID) {
-            rest.put(
-                    "http://localhost:8080/api/nodes/" + previousID + "/next",
-                    nextID
-            );
-        }
-
-        if (nextID != currentID) {
-            rest.put(
-                    "http://localhost:8080/api/nodes/" + nextID + "/previous",
-                    previousID
-            );
-        }
     }
 
     @PostConstruct
     public void init() {
-        int randomId = ThreadLocalRandom.current().nextInt(1, 1000);
-        this.nodeName = "Node-" + randomId;
-        this.ipAddress = "127.0.0.2";
-
+        try {
+            this.ipAddress = InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            this.ipAddress = "127.0.0.1";
+        }
+        this.nodeName = "Node-" + ThreadLocalRandom.current().nextInt(1, 10000);
         this.currentID = HashingUtil.generateHash(nodeName);
         this.previousID = currentID;
         this.nextID = currentID;
@@ -104,47 +81,5 @@ public class Node {
 
     public String getIpAddress() {
         return ipAddress;
-    }
-
-    public int getCurrentID() {
-        return currentID;
-    }
-
-    public int getPreviousID() {
-        return previousID;
-    }
-
-    public int getNextID() {
-        return nextID;
-    }
-
-    public void updateNextIDIntern(int nextID) { this.nextID = nextID; }
-
-    public void updatePreviousIDIntern(int previousID) { this.previousID = previousID; }
-
-    public void setNextID(int nextID) {
-        if (this.nextID != nextID) {
-            updateNextIDIntern(nextID);
-            notifyNamingServer();
-        }
-    }
-
-    public void setPreviousID(int previousID) {
-        if (this.previousID != previousID) {
-            updatePreviousIDIntern(previousID);
-            notifyNamingServer();
-        }
-    }
-
-    public void setCurrentID(int currentID) {
-        this.currentID = currentID;
-    }
-
-    private void notifyNamingServer() {
-        RestTemplate rest = new RestTemplate();
-        NodeController.NodeUpdateRequest payload = new NodeController.NodeUpdateRequest();
-        payload.setPreviousID(this.previousID);
-        payload.setNextID(this.nextID);
-        rest.put("http://localhost:8080/api/nodes/" + this.currentID, payload);
     }
 }
