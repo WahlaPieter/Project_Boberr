@@ -85,7 +85,7 @@ public class Node {
 
     @PreDestroy
     public void onShutdown() {
-        System.out.println("🛑 Graceful shutdown van node: " + nodeName);
+        System.out.println("Graceful shutdown van node: " + nodeName);
 
         // update buren in NamingServer
         if (previousID != currentID) {
