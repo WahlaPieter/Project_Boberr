@@ -58,26 +58,30 @@ public class Node {
         this.previousID = currentID;
         this.nextID = currentID;
 
-        // Create storage directory if not exists
-        Path storageDir = Paths.get(storagePath);
+        // Create storage directory with proper path handling
+        Path storagePath = Paths.get("storage").toAbsolutePath(); // Changed to relative path
         try {
-            if (!Files.exists(storageDir)) {
-                Files.createDirectories(storageDir);
-                System.out.println("Created storage directory: " + storageDir);
+            if (!Files.exists(storagePath)) {
+                Files.createDirectories(storagePath);
+                System.out.println("✅ Created storage directory at: " + storagePath);
+            } else {
+                System.out.println("ℹ️ Using existing storage directory at: " + storagePath);
             }
         } catch (IOException e) {
-            System.err.println("Failed to create storage directory: " + e.getMessage());
+            System.err.println("❌ Failed to create storage directory: " + e.getMessage());
+            throw new RuntimeException("Storage directory initialization failed", e);
         }
 
-        // Initialize replication
+        // Initialize components with consistent path
         this.replicationManager = new ReplicationManager(
-                nodeName, ipAddress, namingServerUrl, rest, "/storage");
-        this.fileWatcher = new FileWatcher("/storage", replicationManager);
+                nodeName, ipAddress, namingServerUrl, rest, storagePath.toString());
+        this.fileWatcher = new FileWatcher(storagePath.toString(), replicationManager);
 
-        FileReplicator.startFileReceiver(8082, "/storage");
+        FileReplicator.startFileReceiver(8081, storagePath.toString());
 
-        System.out.println("Node gestart: " + nodeName + " (ID: " + currentID + ")");
+        System.out.println("🟢 Node started: " + nodeName + " (ID: " + currentID + ")");
     }
+
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
         // start multicast listener

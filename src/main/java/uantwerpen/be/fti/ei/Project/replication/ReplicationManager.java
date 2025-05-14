@@ -28,9 +28,20 @@ public class ReplicationManager {
 
     // Phase 1: Starting - Initial replication
     public void replicateInitialFiles() {
+        System.out.println("🔄 Starting initial replication for directory: " + storageDirectory);
         try {
             Path storagePath = Paths.get(storageDirectory);
-            if (!Files.exists(storagePath)) return;
+            if (!Files.exists(storagePath)) {
+                System.err.println("❌ Storage directory missing: " + storagePath);
+                return;
+            }
+
+            long fileCount = Files.list(storagePath)
+                    .filter(Files::isRegularFile)
+                    .peek(path -> System.out.println("🔎 Found file: " + path))
+                    .count();
+
+            System.out.println("📁 Replicating " + fileCount + " initial files");
 
             Files.list(storagePath)
                     .filter(Files::isRegularFile)

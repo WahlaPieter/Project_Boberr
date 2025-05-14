@@ -15,17 +15,22 @@ public class FileWatcher implements Runnable {
     private Set<String> knownFiles;
 
     public FileWatcher(String directory, ReplicationManager manager) {
-        this.dir = Paths.get(directory);
+        this.dir = Paths.get(directory).toAbsolutePath();
         this.manager = manager;
         this.knownFiles = new HashSet<>();
+
+        System.out.println("🔍 Initializing file watcher for: " + dir);
 
         try {
             if (!Files.exists(dir)) {
                 Files.createDirectories(dir);
+                System.out.println("✅ Created watched directory: " + dir);
             }
             scanInitialFiles();
+            System.out.println("👀 Now watching " + knownFiles.size() + " existing files");
         } catch (IOException e) {
-            System.err.println("Failed to initialize file watcher: " + e.getMessage());
+            System.err.println("❌ File watcher initialization failed: " + e.getMessage());
+            throw new RuntimeException("File watcher startup failed", e);
         }
     }
 

@@ -44,13 +44,17 @@ public class FileReplicator {
         }
     }
     public static void startFileReceiver(int port, String storagePath) {
+        System.out.println("📡 Starting file receiver on port " + port + " for: " + storagePath);
         new Thread(() -> {
             try {
                 Path storageDir = Paths.get(storagePath);
                 if (!Files.exists(storageDir)) {
                     Files.createDirectories(storageDir);
+                    System.out.println("✅ Created receiver storage: " + storageDir);
                 }
+
                 try (ServerSocket serverSocket = new ServerSocket(port)) {
+                    System.out.println("👂 File receiver listening on port " + port);
                     while (!Thread.currentThread().isInterrupted()) {
                         try (Socket socket = serverSocket.accept();
                              InputStream in = socket.getInputStream()) {
