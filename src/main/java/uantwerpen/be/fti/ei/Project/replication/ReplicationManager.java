@@ -5,6 +5,7 @@ import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
@@ -28,7 +29,12 @@ public class ReplicationManager {
     // Phase 1: Starting - Initial replication
     public void replicateInitialFiles() {
         try {
-            Files.list(Paths.get(storageDirectory)).filter(Files::isRegularFile).forEach(file -> {
+            Path storagePath = Paths.get(storageDirectory);
+            if (!Files.exists(storagePath)) return;
+
+            Files.list(storagePath)
+                    .filter(Files::isRegularFile)
+                    .forEach(file -> {
                         String fileName = file.getFileName().toString();
                         int fileHash = HashingUtil.generateHash(fileName);
 
@@ -53,7 +59,7 @@ public class ReplicationManager {
                         }
                     });
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("Replication error: " + e.getMessage());
         }
     }
 

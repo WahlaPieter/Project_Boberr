@@ -15,7 +15,11 @@ import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.replication.FileWatcher;
 import uantwerpen.be.fti.ei.Project.replication.ReplicationManager;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -29,6 +33,8 @@ public class Node {
     private String ipAddress;
     private ReplicationManager replicationManager;
     private FileWatcher fileWatcher;
+    @Value("${storage.path}")
+    private String storagePath;
 
     @Value("${namingserver.url}")
     private String namingServerUrl;
@@ -52,6 +58,17 @@ public class Node {
         this.previousID = currentID;
         this.nextID = currentID;
 
+        // Create storage directory if not exists
+        Path storageDir = Paths.get(storagePath);
+        try {
+            if (!Files.exists(storageDir)) {
+                Files.createDirectories(storageDir);
+                System.out.println("Created storage directory: " + storageDir);
+            }
+        } catch (IOException e) {
+            System.err.println("Failed to create storage directory: " + e.getMessage());
+        }
+
         // Initialize replication
         this.replicationManager = new ReplicationManager(
                 nodeName, ipAddress, namingServerUrl, rest, "/storage");
@@ -61,7 +78,6 @@ public class Node {
 
         System.out.println("Node gestart: " + nodeName + " (ID: " + currentID + ")");
     }
-
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
         // start multicast listener

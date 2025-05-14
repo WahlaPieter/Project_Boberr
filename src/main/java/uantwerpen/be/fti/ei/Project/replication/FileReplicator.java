@@ -4,6 +4,7 @@ import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 
@@ -44,19 +45,25 @@ public class FileReplicator {
     }
     public static void startFileReceiver(int port, String storagePath) {
         new Thread(() -> {
-            try (ServerSocket serverSocket = new ServerSocket(port)) {
-                while (!Thread.currentThread().isInterrupted()) {
-                    try (Socket socket = serverSocket.accept();
-                         InputStream in = socket.getInputStream()) {
+            try {
+                Path storageDir = Paths.get(storagePath);
+                if (!Files.exists(storageDir)) {
+                    Files.createDirectories(storageDir);
+                }
+                try (ServerSocket serverSocket = new ServerSocket(port)) {
+                    while (!Thread.currentThread().isInterrupted()) {
+                        try (Socket socket = serverSocket.accept();
+                             InputStream in = socket.getInputStream()) {
 
-                        byte[] fileData = receiveFile("temp", in);
-                        String fileName = new String(fileData, 0, fileData.length).split("\n")[0];
-                        Files.write(Paths.get(storagePath, fileName),
-                                fileData, StandardOpenOption.CREATE);
+                            byte[] fileData = receiveFile("temp", in);
+                            String fileName = new String(fileData, 0, fileData.length).split("\n")[0];
+                            Files.write(Paths.get(storagePath, fileName),
+                                    fileData, StandardOpenOption.CREATE);
+                        }
                     }
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("File receiver error: " + e.getMessage());
             }
         }).start();
     }

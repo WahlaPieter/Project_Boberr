@@ -18,7 +18,15 @@ public class FileWatcher implements Runnable {
         this.dir = Paths.get(directory);
         this.manager = manager;
         this.knownFiles = new HashSet<>();
-        scanInitialFiles();
+
+        try {
+            if (!Files.exists(dir)) {
+                Files.createDirectories(dir);
+            }
+            scanInitialFiles();
+        } catch (IOException e) {
+            System.err.println("Failed to initialize file watcher: " + e.getMessage());
+        }
     }
 
     private void scanInitialFiles() {
