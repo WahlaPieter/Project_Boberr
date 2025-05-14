@@ -11,7 +11,7 @@ import java.nio.file.StandardOpenOption;
 public class FileReplicator {
     // this class will handle the actual file transfers
     public static void transferFile(String sourceIp, String targetIp, String fileName, byte[] fileData) throws IOException {
-        try (Socket socket = new Socket(targetIp, 8081);
+        try (Socket socket = new Socket(targetIp, 8082);
              OutputStream out = socket.getOutputStream();
              DataOutputStream dos = new DataOutputStream(out)) {
 
