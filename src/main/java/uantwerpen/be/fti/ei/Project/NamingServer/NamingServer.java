@@ -2,6 +2,8 @@ package uantwerpen.be.fti.ei.Project.NamingServer;
 
 import jakarta.annotation.PostConstruct;
 import org.springframework.context.annotation.Profile;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.stereotype.Component;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
@@ -13,6 +15,9 @@ import java.util.*;
 @Component
 @Profile("namingserver")
 public class NamingServer {
+    @Autowired
+    private RestTemplate restTemplate;
+
     private final TreeMap<Integer, Node> nodeMap;
     private final Map<String, Set<String>> storedFiles;
 
@@ -149,21 +154,24 @@ public class NamingServer {
     private void startFailureDetection() {
         Thread t = new Thread(() -> {
             while (true) {
-                for (var e : new HashMap<>(nodeMap).entrySet()) {
-                    String ip = e.getValue().getIpAddress();
-                    if (!ping(ip)) handleNodeFailure(e.getKey(), ip);
-                }
-                try { Thread.sleep(30000); } catch (InterruptedException ignored) { }
+                new HashMap<>(nodeMap).forEach((hash, node) -> {
+                    if (!isAlive(node.getIpAddress())) {
+                        System.out.println("Node failure gedetecteerd: " + node.getIpAddress());
+                        handleNodeFailure(hash, node.getIpAddress());
+                    }
+                });
+                try { Thread.sleep(30000); } catch (InterruptedException ignored) {}
             }
         });
         t.setDaemon(true);
         t.start();
     }
 
-    private boolean ping(String ip) {
+    private boolean isAlive(String ip) {
         try {
-            Process p = Runtime.getRuntime().exec("ping -c 1 " + ip);
-            return p.waitFor() == 0;
+            // eenvoudig REST‐probe
+            restTemplate.getForEntity("http://" + ip + ":8081/actuator/health", String.class);
+            return true;
         } catch (Exception e) {
             return false;
         }
