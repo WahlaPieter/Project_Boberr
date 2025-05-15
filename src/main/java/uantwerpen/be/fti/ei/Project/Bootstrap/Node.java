@@ -139,17 +139,30 @@ public class Node {
         else return target > low || target < high;
     }
 
-    public void sendBootstrapResponse(String destIp) {
-        int updatedField = (isBetween(currentID, currentID, nextID) ? 2 : 1);
+    public void sendBootstrapResponse(String destIp, int newNodeHash) {
+        int updatedField;
+
+        // Bepaal of deze node de "previous" of "next" is voor de nieuwe node
+        if (isBetween(currentID, newNodeHash, nextID)) {
+            updatedField = 1; // Ik ben de vorige voor de nieuwe node
+        } else if (isBetween(previousID, newNodeHash, currentID)) {
+            updatedField = 2; // Ik ben de volgende voor de nieuwe node
+        } else {
+            // Ik ben niet relevant voor deze node — niks sturen
+            return;
+        }
+
         Map<String, Integer> resp = Map.of(
                 "updatedField", updatedField,
                 "nodeID", currentID
         );
+
         try {
             rest.postForObject("http://" + destIp + ":8080/api/bootstrap/update", resp, Void.class);
-            System.out.println(" Bootstrap info naar " + destIp);
+            System.out.println("📤 Bootstrap info verzonden naar " + destIp + " (veld: " + updatedField + ")");
         } catch (Exception e) {
-            System.err.println(" Fout bij bootstrap naar " + destIp);
+            System.err.println("❌ Fout bij bootstrap naar " + destIp + " - " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
