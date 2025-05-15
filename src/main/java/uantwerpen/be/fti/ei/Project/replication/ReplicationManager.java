@@ -54,19 +54,27 @@ public class ReplicationManager {
                                 namingServerUrl + "/api/replicate?hash=" + fileHash,
                                 Map.class);
 
-                        if (response != null && !response.get("ip").equals(ipAddress)) {
+                        if (response != null) {
+                            String targetIp = response.get("ip");
+
+                            if (targetIp.equals(ipAddress)) {
+                                System.out.println("⚠️  Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
+                                return; // skip dit bestand
+                            }
+
                             try {
                                 byte[] fileData = Files.readAllBytes(file);
-                                FileReplicator.transferFile(ipAddress, response.get("ip"), fileName, fileData);
+                                FileReplicator.transferFile(ipAddress, targetIp, fileName, fileData);
 
                                 // Update naming server about replication
                                 restTemplate.postForObject(
                                         namingServerUrl + "/api/files/replicate",
                                         Map.of(
                                                 "fileName", fileName,
-                                                "ownerIp", response.get("ip"),
-                                                "replicaIp", ipAddress),
+                                                "ownerIp", ipAddress,
+                                                "replicaIp", targetIp),
                                         Void.class);
+
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
@@ -84,17 +92,24 @@ public class ReplicationManager {
                 namingServerUrl + "/api/replicate?hash=" + fileHash,
                 Map.class);
 
-        if (response != null && !response.get("ip").equals(ipAddress)) {
+        if (response != null) {
+            String targetIp = response.get("ip");
+
+            if (targetIp.equals(ipAddress)) {
+                System.out.println("⚠️  Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
+                return; // skip replicatie naar zichzelf
+            }
+
             try {
                 byte[] fileData = Files.readAllBytes(Paths.get(storageDirectory, fileName));
-                FileReplicator.transferFile(ipAddress, response.get("ip"), fileName, fileData);
+                FileReplicator.transferFile(ipAddress, targetIp, fileName, fileData);
 
                 restTemplate.postForObject(
                         namingServerUrl + "/api/files/replicate",
                         Map.of(
                                 "fileName", fileName,
-                                "ownerIp", response.get("ip"),
-                                "replicaIp", ipAddress),
+                                "ownerIp", ipAddress,
+                                "replicaIp", targetIp),
                         Void.class);
             } catch (IOException e) {
                 e.printStackTrace();
