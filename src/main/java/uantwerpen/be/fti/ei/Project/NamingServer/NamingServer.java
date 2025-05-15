@@ -215,4 +215,22 @@ public class NamingServer {
                 });
     }
 
+    public List<Map<String, String>> getReplicatedFilesForNode(int hash) {
+        List<Map<String, String>> replicatedFiles = new ArrayList<>();
+
+        Node node = nodeMap.get(hash);
+        if (node == null) return replicatedFiles;
+
+        String ip = node.getIpAddress();
+        Set<String> files = storedFiles.getOrDefault(ip, Set.of());
+
+        for (String file : files) {
+            replicatedFiles.add(Map.of(
+                    "fileName", file,
+                    "currentOwner", ip
+            ));
+        }
+
+        return replicatedFiles;
+    }
 }

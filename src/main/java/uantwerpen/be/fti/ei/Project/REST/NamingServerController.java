@@ -85,4 +85,9 @@ public class NamingServerController {
         namingServer.removeFileReplica(fileName, replicaIp);
         return ResponseEntity.ok().build();
     }
+    @GetMapping("/nodes/{hash}/replicated")
+    public ResponseEntity<?> getReplicatedFiles(@PathVariable int hash) {
+        var replicas = namingServer.getReplicatedFilesForNode(hash);
+        return ResponseEntity.ok(replicas);
+    }
 }
