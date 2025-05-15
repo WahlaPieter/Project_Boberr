@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
 import java.util.Map;
@@ -89,6 +90,18 @@ public class NamingServerController {
     public ResponseEntity<?> getReplicatedFiles(@PathVariable int hash) {
         var replicas = namingServer.getReplicatedFilesForNode(hash);
         return ResponseEntity.ok(replicas);
+    }
+
+    @GetMapping("/nodes/{hash}/shouldReplicate")
+    public ResponseEntity<?> shouldReplicate(@PathVariable int hash,
+                                             @RequestParam String file) {
+        int fileHash = HashingUtil.generateHash(file);
+        String target = namingServer.getNodeForReplication(fileHash);
+        return ResponseEntity.ok(Map.of(
+                "file", file,
+                "fileHash", fileHash,
+                "targetNode", target
+        ));
     }
 
 }

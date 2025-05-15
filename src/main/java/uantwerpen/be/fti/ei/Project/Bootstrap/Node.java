@@ -81,26 +81,47 @@ public class Node {
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
-        // start multicast listener
+        // Start multicast listener (keep this)
         Thread listener = new Thread(new MulticastReceiver(this));
         listener.setDaemon(true);
         listener.start();
 
-        // Start file watcher
-        Thread watcherThread = new Thread(String.valueOf(fileWatcher));
+        // Start file watcher (keep this - fixed version)
+        Thread watcherThread = new Thread(fileWatcher);
         watcherThread.setDaemon(true);
         watcherThread.start();
 
-        // send discovery
-        MulticastSender.sendDiscoveryMessage(nodeName, ipAddress);
-        // register with naming server
-        Map<String, String> payload = Map.of("nodeName", nodeName, "ipAddress", ipAddress);
-        rest.postForObject(namingServerUrl + "/api/nodes", payload, Void.class);
+        // Start a separate thread for discovery with delay
+        new Thread(() -> {
+            try {
+                // Wait for other nodes to potentially start
+                Thread.sleep(3000);  // 3 second delay
 
+                // Send initial discovery message
+                MulticastSender.sendDiscoveryMessage(nodeName, ipAddress);
 
-        // Perform initial replication
-        replicationManager.replicateInitialFiles();
-        System.out.println(" Geregistreerd bij NamingServer: " + namingServerUrl);
+                // Register with naming server (keep this)
+                Map<String, String> payload = Map.of(
+                        "nodeName", nodeName,
+                        "ipAddress", ipAddress
+                );
+                rest.postForObject(
+                        namingServerUrl + "/api/nodes",
+                        payload,
+                        Void.class
+                );
+
+                System.out.println("Registered with NamingServer: " + namingServerUrl);
+
+                // Perform initial replication (keep this)
+                replicationManager.replicateInitialFiles();
+
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                System.err.println("Bootstrap error: " + e.getMessage());
+            }
+        }).start();
     }
 
     @PreDestroy

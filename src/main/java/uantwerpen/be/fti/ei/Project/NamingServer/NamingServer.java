@@ -183,21 +183,23 @@ public class NamingServer {
     public void saveFileMap() { JsonService.saveStoredFiles(storedFiles); }
 
     public synchronized String getNodeForReplication(int hash) {
-        if (nodeMap.isEmpty()) return null;
+        if (nodeMap.isEmpty() || nodeMap.size() == 1) {
+            return null; // No other nodes available for replication
+        }
+        // Find owner of the node
+        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingKey(hash) != null ?
+                nodeMap.ceilingEntry(hash) :
+                nodeMap.firstEntry();
 
-        // Find the node where node.hash < file.hash
-        Map.Entry<Integer, Node> lower = nodeMap.lowerEntry(hash);
-        if (lower == null) {
-            // Wrap around to the highest node
-            lower = nodeMap.lastEntry();
+        // Find replica node (next in the ring)
+        Node replicaNode = nodeMap.get(ownerEntry.getValue().getNextID());
+
+        // Ensure we don't replicate to self
+        if (replicaNode.getIpAddress().equals(ownerEntry.getValue().getIpAddress())) {
+            replicaNode = nodeMap.get(replicaNode.getNextID()); // Skip to next node
         }
 
-        // Check if this node would be the owner (edge case)
-        if (lower.getKey() == hash) {
-            return null; // File hash matches node hash - no replication needed
-        }
-
-        return lower.getValue().getIpAddress();
+        return replicaNode.getIpAddress();
     }
 
     public synchronized void registerFileReplication(String fileName, String ownerIp, String replicaIp) {
