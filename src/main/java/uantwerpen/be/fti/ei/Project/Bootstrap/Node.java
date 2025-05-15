@@ -74,7 +74,7 @@ public class Node {
                 nodeName, ipAddress, namingServerUrl, rest, storagePath.toString());
         this.fileWatcher = new FileWatcher(storagePath.toString(), replicationManager);
 
-        FileReplicator.startFileReceiver(8081, storagePath.toString());
+        FileReplicator.startFileReceiver(8082, storagePath.toString());
 
         System.out.println("🟢 Node started: " + nodeName + " (ID: " + currentID + ")");
     }

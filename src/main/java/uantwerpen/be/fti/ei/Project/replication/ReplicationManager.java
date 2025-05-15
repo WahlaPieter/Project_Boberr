@@ -61,8 +61,11 @@ public class ReplicationManager {
 
                                 // Update naming server about replication
                                 restTemplate.postForObject(
-                                        namingServerUrl + "/api/files",
-                                        Map.of("fileName", fileName, "owner", response.get("ip"), "replicas", ipAddress),
+                                        namingServerUrl + "/api/files/replicate",
+                                        Map.of(
+                                                "fileName", fileName,
+                                                "ownerIp", response.get("ip"),
+                                                "replicaIp", ipAddress),
                                         Void.class);
                             } catch (IOException e) {
                                 e.printStackTrace();
@@ -87,11 +90,11 @@ public class ReplicationManager {
                 FileReplicator.transferFile(ipAddress, response.get("ip"), fileName, fileData);
 
                 restTemplate.postForObject(
-                        namingServerUrl + "/api/files",
+                        namingServerUrl + "/api/files/replicate",
                         Map.of(
                                 "fileName", fileName,
-                                "owner", response.get("ip"),
-                                "replicas", ipAddress),
+                                "ownerIp", response.get("ip"),
+                                "replicaIp", ipAddress),
                         Void.class);
             } catch (IOException e) {
                 e.printStackTrace();
