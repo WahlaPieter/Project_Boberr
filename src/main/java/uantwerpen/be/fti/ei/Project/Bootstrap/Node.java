@@ -1,6 +1,7 @@
 package uantwerpen.be.fti.ei.Project.Bootstrap;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
@@ -41,10 +42,6 @@ public class Node {
 
     @Autowired
     private RestTemplate rest;
-
-    public Node() {
-        Runtime.getRuntime().addShutdownHook(new Thread(this::gracefulShutdown));
-    }
 
     @PostConstruct
     public void init() {
@@ -106,19 +103,20 @@ public class Node {
         System.out.println(" Geregistreerd bij NamingServer: " + namingServerUrl);
     }
 
-    private void gracefulShutdown() {
-        System.out.println(" Shutting down node: " + nodeName);
+    @PreDestroy
+    public void onShutdown() {
+        System.out.println("Graceful shutdown van node: " + nodeName);
 
-        // Transfer replicated files
-        replicationManager.transferReplicatedFiles();
-
+        // update buren in NamingServer
         if (previousID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + previousID + "/next", nextID);
         }
         if (nextID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + nextID + "/previous", previousID);
         }
+        // deregistreer
         rest.delete(namingServerUrl + "/api/nodes/" + currentID);
+        System.out.println("Node verwijderd: " + currentID);
     }
 
     public synchronized boolean handleDiscovery(String newName, String newIp) {
