@@ -28,11 +28,11 @@ public class ReplicationManager {
 
     // Phase 1: Starting - Initial replication
     public void replicateInitialFiles() {
-        System.out.println("🔄 Starting initial replication for directory: " + storageDirectory);
+        System.out.println("Starting initial replication for directory: " + storageDirectory);
         try {
             Path storagePath = Paths.get(storageDirectory);
             if (!Files.exists(storagePath)) {
-                System.err.println("❌ Storage directory missing: " + storagePath);
+                System.err.println("Storage directory missing: " + storagePath);
                 return;
             }
 
@@ -58,7 +58,7 @@ public class ReplicationManager {
                             String targetIp = response.get("ip");
 
                             if (targetIp.equals(ipAddress)) {
-                                System.out.println("⚠️  Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
+                                System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
                                 return; // skip dit bestand
                             }
 
@@ -96,7 +96,7 @@ public class ReplicationManager {
             String targetIp = response.get("ip");
 
             if (targetIp.equals(ipAddress)) {
-                System.out.println("⚠️  Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
+                System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
                 return; // skip replicatie naar zichzelf
             }
 

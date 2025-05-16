@@ -184,22 +184,31 @@ public class NamingServer {
 
     public synchronized String getNodeForReplication(int hash) {
         if (nodeMap.isEmpty() || nodeMap.size() == 1) {
-            return null; // No other nodes available for replication
-        }
-        // Find owner of the node
-        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingKey(hash) != null ?
-                nodeMap.ceilingEntry(hash) :
-                nodeMap.firstEntry();
-
-        // Find replica node (next in the ring)
-        Node replicaNode = nodeMap.get(ownerEntry.getValue().getNextID());
-
-        // Ensure we don't replicate to self
-        if (replicaNode.getIpAddress().equals(ownerEntry.getValue().getIpAddress())) {
-            replicaNode = nodeMap.get(replicaNode.getNextID()); // Skip to next node
+            return null; // Geen replicatie mogelijk
         }
 
-        return replicaNode.getIpAddress();
+        // Vind eigenaar van bestand
+        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingKey(hash) != null
+                ? nodeMap.ceilingEntry(hash)
+                : nodeMap.firstEntry();
+
+        Node owner = ownerEntry.getValue();
+        Node replica = nodeMap.get(owner.getNextID());
+
+        // Probeer andere node dan eigenaar
+        int attempts = 0;
+        while (replica.getIpAddress().equals(owner.getIpAddress())) {
+            replica = nodeMap.get(replica.getNextID());
+            attempts++;
+
+            if (attempts >= nodeMap.size()) {
+                // ring rondgegaan, niemand gevonden
+                System.out.println("Geen geldige replica: iedereen is eigenaar");
+                return null;
+            }
+        }
+
+        return replica.getIpAddress();
     }
 
     public synchronized void registerFileReplication(String fileName, String ownerIp, String replicaIp) {
