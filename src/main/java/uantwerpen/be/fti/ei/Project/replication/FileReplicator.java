@@ -44,7 +44,7 @@ public class FileReplicator {
         }
     }
     public static void startFileReceiver(int port, String storagePath) {
-        System.out.println("📡 Starting file receiver on port " + port + " for: " + storagePath);
+        System.out.println("Starting file receiver on port " + port + " for: " + storagePath);
         new Thread(() -> {
             try {
                 Path storageDir = Paths.get(storagePath);
