@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
+import uantwerpen.be.fti.ei.Project.replication.FileTransferRequest;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -18,6 +19,7 @@ import java.util.Map;
 @RequestMapping("/api/bootstrap")
 @Profile("node")
 public class NodeController {
+
     @Autowired
     private Node node;
 
@@ -30,11 +32,10 @@ public class NodeController {
         return ResponseEntity.ok(Map.of("status","updated"));
     }
     @PostMapping("/files/receive")
-    public ResponseEntity<?> receiveFile(@RequestBody byte[] fileData) {
-        try (InputStream in = new ByteArrayInputStream(fileData)) {
-            byte[] receivedData = FileReplicator.receiveFile("received_file", in);
-            // Save the file to storage
-            Files.write(Paths.get("/storage/received_file"), receivedData);
+    public ResponseEntity<?> receiveFile(@RequestBody FileTransferRequest request) {
+        try (InputStream in = new ByteArrayInputStream(request.getData())) {
+            byte[] receivedData = FileReplicator.receiveFile(request.getFileName(), in);
+            Files.write(Paths.get("/storage", request.getFileName()), receivedData);
             return ResponseEntity.ok().build();
         } catch (IOException e) {
             return ResponseEntity.status(500).build();

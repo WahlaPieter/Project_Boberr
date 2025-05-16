@@ -204,6 +204,10 @@ public class NamingServer {
 
     public synchronized void registerFileReplication(String fileName, String ownerIp, String replicaIp) {
         storedFiles.computeIfAbsent(ownerIp, k -> new HashSet<>()).add(fileName);
+
+        if (!ownerIp.equals(replicaIp)) {
+            storedFiles.computeIfAbsent(replicaIp, k -> new HashSet<>()).add(fileName);
+        }
         saveFileMap();
     }
 
