@@ -19,17 +19,17 @@ public class FileWatcher implements Runnable {
         this.manager = manager;
         this.knownFiles = new HashSet<>();
 
-        System.out.println("🔍 Initializing file watcher for: " + dir);
+        System.out.println("Initializing file watcher for: " + dir);
 
         try {
             if (!Files.exists(dir)) {
                 Files.createDirectories(dir);
-                System.out.println("✅ Created watched directory: " + dir);
+                System.out.println("Created watched directory: " + dir);
             }
             scanInitialFiles();
-            System.out.println("👀 Now watching " + knownFiles.size() + " existing files");
+            System.out.println("Now watching " + knownFiles.size() + " existing files");
         } catch (IOException e) {
-            System.err.println("❌ File watcher initialization failed: " + e.getMessage());
+            System.err.println("File watcher initialization failed: " + e.getMessage());
             throw new RuntimeException("File watcher startup failed", e);
         }
     }

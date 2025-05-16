@@ -22,26 +22,36 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Component
 @Profile("node")
 public class Node {
+
+    /* ------------- ring info ------------- */
     private int currentID;
     private int previousID;
     private int nextID;
+
+    /* ------------- identiteit ------------- */
     private String nodeName;
     private String ipAddress;
-    private ReplicationManager replicationManager;
-    private FileWatcher fileWatcher;
+
+    /* ------------- runtime-only state (NIET serialiseren) ------------- */
+    private transient ReplicationManager replicationManager;   // lab 5
+    private transient FileWatcher        fileWatcher;          // lab 5
+    private transient CompletableFuture<Integer> nodeCountFuture = new CompletableFuture<>();
+
+    @Autowired
+    private transient RestTemplate rest;
+
+    /* ------------- config ------------- */
     @Value("${storage.path}")
     private String storagePath;
 
     @Value("${namingserver.url}")
     private String namingServerUrl;
-
-    @Autowired
-    private RestTemplate rest;
 
     @PostConstruct
     public void init() {
@@ -60,12 +70,12 @@ public class Node {
         try {
             if (!Files.exists(storagePath)) {
                 Files.createDirectories(storagePath);
-                System.out.println("✅ Created storage directory at: " + storagePath);
+                System.out.println("Created storage directory at: " + storagePath);
             } else {
-                System.out.println("ℹ️ Using existing storage directory at: " + storagePath);
+                System.out.println("Using existing storage directory at: " + storagePath);
             }
         } catch (IOException e) {
-            System.err.println("❌ Failed to create storage directory: " + e.getMessage());
+            System.err.println("Failed to create storage directory: " + e.getMessage());
             throw new RuntimeException("Storage directory initialization failed", e);
         }
 
@@ -76,7 +86,7 @@ public class Node {
 
         FileReplicator.startFileReceiver(8082, storagePath.toString());
 
-        System.out.println("🟢 Node started: " + nodeName + " (ID: " + currentID + ")");
+        System.out.println("Node started: " + nodeName + " (ID: " + currentID + ")");
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -97,21 +107,16 @@ public class Node {
                 // Wait for other nodes to potentially start
                 Thread.sleep(3000);  // 3 second delay
 
-                // Send initial discovery message
+                /* stap 1 – multicast zodat NamingServer ons registreert */
                 MulticastSender.sendDiscoveryMessage(nodeName, ipAddress);
 
-                // Register with naming server (keep this)
-                Map<String, String> payload = Map.of(
-                        "nodeName", nodeName,
-                        "ipAddress", ipAddress
-                );
-                rest.postForObject(
-                        namingServerUrl + "/api/nodes",
-                        payload,
-                        Void.class
-                );
-
                 System.out.println("Registered with NamingServer: " + namingServerUrl);
+
+                nodeCountFuture.orTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                        .whenComplete((cnt, ex) -> {
+                            if (ex == null)
+                                System.out.println("Ring bevat nu " + cnt + " node(s)");
+                        });
 
                 // Perform initial replication (keep this)
                 replicationManager.replicateInitialFiles();
@@ -155,36 +160,27 @@ public class Node {
         return updated;
     }
 
+    public void setInitialCount(int count){
+        if (count <= 1){
+            previousID = currentID;
+            nextID     = currentID;
+        }
+        nodeCountFuture.complete(count);
+    }
+
     private boolean isBetween(int low, int target, int high) {
         if (low < high) return target > low && target < high;
         else return target > low || target < high;
     }
 
-    public void sendBootstrapResponse(String destIp, int newNodeHash) {
-        int updatedField;
-
-        // Bepaal of deze node de "previous" of "next" is voor de nieuwe node
-        if (isBetween(currentID, newNodeHash, nextID)) {
-            updatedField = 1; // Ik ben de vorige voor de nieuwe node
-        } else if (isBetween(previousID, newNodeHash, currentID)) {
-            updatedField = 2; // Ik ben de volgende voor de nieuwe node
-        } else {
-            // Ik ben niet relevant voor deze node — niks sturen
-            return;
-        }
-
-        Map<String, Integer> resp = Map.of(
-                "updatedField", updatedField,
-                "nodeID", currentID
+    public void sendBootstrapResponse(String destIp, int newHash, boolean updated) {
+        Map<String, Object> resp = Map.of(
+                "updatedField", updated ? (isBetween(currentID, newHash, nextID) ? 1 : 2) : 0,
+                "nodeID", currentID,
+                "previousID", previousID,
+                "nextID", nextID
         );
-
-        try {
-            rest.postForObject("http://" + destIp + ":8080/api/bootstrap/update", resp, Void.class);
-            System.out.println("📤 Bootstrap info verzonden naar " + destIp + " (veld: " + updatedField + ")");
-        } catch (Exception e) {
-            System.err.println("❌ Fout bij bootstrap naar " + destIp + " - " + e.getClass().getSimpleName() + ": " + e.getMessage());
-            e.printStackTrace();
-        }
+        rest.postForObject("http://" + destIp + ":8081/api/bootstrap/update", resp, Void.class);
     }
 
     public void updatePrevious(int id) { this.previousID = id; }
@@ -216,5 +212,11 @@ public class Node {
 
     public String getIpAddress() {
         return ipAddress;
+    }
+
+    public int getCurrentID() {return currentID;}
+
+    public String getNodeName() {
+        return nodeName;
     }
 }

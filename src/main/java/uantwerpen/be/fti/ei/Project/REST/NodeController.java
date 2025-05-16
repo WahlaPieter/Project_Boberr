@@ -24,13 +24,15 @@ public class NodeController {
     private Node node;
 
     @PostMapping("/update")
-    public ResponseEntity<?> update(@RequestBody Map<String, Integer> payload) {
-        int field = payload.get("updatedField");
-        int id = payload.get("nodeID");
-        if (field == 1) node.updatePrevious(id);
-        else if (field == 2) node.updateNext(id);
-        return ResponseEntity.ok(Map.of("status","updated"));
+    public ResponseEntity<?> update(@RequestBody Map<String,Object> p){
+        int field = (int) p.get("updatedField");
+        if (field == 1)      node.updatePrevious((int) p.get("nodeID"));
+        else if (field == 2) node.updateNext((int) p.get("nodeID"));
+        // bij field==0 verandert er niets, maar we hebben wel de info:
+        // zou kunnen loggen of controleren
+        return ResponseEntity.ok().build();
     }
+
     @PostMapping("/files/receive")
     public ResponseEntity<?> receiveFile(@RequestBody FileTransferRequest request) {
         try (InputStream in = new ByteArrayInputStream(request.getData())) {
@@ -40,5 +42,23 @@ public class NodeController {
         } catch (IOException e) {
             return ResponseEntity.status(500).build();
         }
+    }
+
+    // nieuwe mapping in NodeController
+    @PostMapping("/info")
+    public ResponseEntity<Void> receiveCount(@RequestBody Map<String,Integer> m){
+        node.setInitialCount(m.get("count"));
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/state")
+    public Map<String, Object> nodeState() {
+        return Map.of(
+                "nodeName",  node.getNodeName(),
+                "ipAddress", node.getIpAddress(),
+                "currentID", node.getCurrentID(),
+                "previousID", node.getPreviousID(),
+                "nextID",     node.getNextID()
+        );
     }
 }

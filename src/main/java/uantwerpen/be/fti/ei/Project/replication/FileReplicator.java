@@ -50,11 +50,11 @@ public class FileReplicator {
                 Path storageDir = Paths.get(storagePath);
                 if (!Files.exists(storageDir)) {
                     Files.createDirectories(storageDir);
-                    System.out.println("✅ Created receiver storage: " + storageDir);
+                    System.out.println("Created receiver storage: " + storageDir);
                 }
 
                 try (ServerSocket serverSocket = new ServerSocket(port)) {
-                    System.out.println("👂 File receiver listening on port " + port);
+                    System.out.println("File receiver listening on port " + port);
                     while (!Thread.currentThread().isInterrupted()) {
                         try (Socket socket = serverSocket.accept();
                              InputStream in = socket.getInputStream()) {

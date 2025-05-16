@@ -13,7 +13,7 @@ public class MulticastReceiver implements Runnable {
     public void run() {
         try (MulticastSocket socket = new MulticastSocket(MulticastConfig.MULTICAST_PORT)) {
             socket.joinGroup(InetAddress.getByName(MulticastConfig.MULTICAST_ADDRESS));
-            System.out.println("📡 Listening for discovery messages...");
+            System.out.println("Listening for discovery messages...");
             byte[] buffer = new byte[256];
 
             while (true) {
@@ -27,15 +27,13 @@ public class MulticastReceiver implements Runnable {
 
                     int newNodeHash = uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil.generateHash(name);
 
-                    // Laat huidige node zichzelf eventueel aanpassen
-                    node.handleDiscovery(name, ip);
+                    boolean relevant = node.handleDiscovery(name, ip);
+                        node.sendBootstrapResponse(ip, newNodeHash,relevant);
 
-                    // Bepaal of we relevant zijn voor deze nieuwe node
-                    node.sendBootstrapResponse(ip, newNodeHash);
                 }
             }
         } catch (Exception e) {
-            System.err.println("❌ Fout tijdens luisteren naar discovery: " + e.getMessage());
+            System.err.println("Fout tijdens luisteren naar discovery: " + e.getMessage());
             e.printStackTrace();
         }
     }
