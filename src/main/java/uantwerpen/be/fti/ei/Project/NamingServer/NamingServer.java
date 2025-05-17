@@ -6,10 +6,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.stereotype.Component;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
+import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
 import uantwerpen.be.fti.ei.Project.storage.JsonService;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 
 @Component
@@ -53,12 +58,30 @@ public class NamingServer {
     public synchronized boolean removeNode(int hash) {
         Node node = nodeMap.get(hash);
         if (node == null) return false;
+
+        // Transfer files to new responsible nodes
+        String ip = node.getIpAddress();
+        Set<String> files = storedFiles.getOrDefault(ip, Set.of());
+        for (String f : files) {
+            int h = HashingUtil.generateHash(f);
+            String newOwner = findResponsibleNode(h);
+            if (!Objects.equals(newOwner, ip)) {
+                try {
+                    FileReplicator.transferFile(ip, newOwner, f,
+                            FileStorage.readFileBytes(ip, f));
+                    storedFiles.computeIfAbsent(newOwner, k -> new HashSet<>()).add(f);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
         Node prev = nodeMap.get(node.getPreviousID());
         Node next = nodeMap.get(node.getNextID());
         if (prev != null) prev.setNextID(node.getNextID());
         if (next != null) next.setPreviousID(node.getPreviousID());
         nodeMap.remove(hash);
-        storedFiles.remove(node.getIpAddress());
+        storedFiles.remove(ip);
         saveNodeMap();
         saveFileMap();
         redistributeFiles();
@@ -112,6 +135,7 @@ public class NamingServer {
 
     private void redistributeFiles() {
         Map<String, Set<String>> toMove = new HashMap<>();
+
         for (var entry : storedFiles.entrySet()) {
             String ip = entry.getKey();
             for (String f : entry.getValue()) {
@@ -122,17 +146,32 @@ public class NamingServer {
                 }
             }
         }
+
         toMove.forEach((src, files) -> {
             for (String f : files) {
-                try {
-                    FileStorage.moveFile(src, findResponsibleNode(HashingUtil.generateHash(f)), f);
-                    storedFiles.get(src).remove(f);
-                    storedFiles.get(findResponsibleNode(HashingUtil.generateHash(f))).add(f);
-                } catch (IOException e) {
-                    e.printStackTrace();
+                String dst = findResponsibleNode(HashingUtil.generateHash(f));
+                Path sourcePath = Paths.get("nodes_storage/" + src + "/" + f);
+                Path targetPath = Paths.get("nodes_storage/" + dst + "/" + f);
+
+                if (Files.exists(sourcePath)) {
+                    try {
+                        Files.createDirectories(targetPath.getParent()); // maak map aan als die nog niet bestaat
+                        Files.move(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+                        storedFiles.get(src).remove(f);
+                        storedFiles.computeIfAbsent(dst, k -> new HashSet<>()).add(f);
+
+                        System.out.println("Files redistributed: " + f + " van " + src + " → " + dst);
+                    } catch (IOException e) {
+                        System.err.println("Error redistribution of files: " + f);
+                        e.printStackTrace();
+                    }
+                } else {
+                    System.err.println(" File not found for redistribution: " + sourcePath);
                 }
             }
         });
+
         saveFileMap();
     }
 

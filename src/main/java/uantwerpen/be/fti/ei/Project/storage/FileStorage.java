@@ -1,5 +1,6 @@
 package uantwerpen.be.fti.ei.Project.storage;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.Set;
@@ -22,5 +23,13 @@ public class FileStorage {
 
     public static boolean fileExists(String ip, String fileName) {
         return Files.exists(Paths.get(BASE + ip + "/" + fileName + ".txt"));
+    }
+
+    public static byte[] readFileBytes(String ip, String fileName) throws IOException {
+        Path filePath = Paths.get(BASE + ip + "/" + fileName + ".txt");
+        if (!Files.exists(filePath)) {
+            throw new FileNotFoundException("File not found: " + filePath.toString());
+        }
+        return Files.readAllBytes(filePath);
     }
 }
