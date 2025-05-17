@@ -8,6 +8,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ReplicationManager {
     // this class is the manager, will delete and add files
@@ -16,6 +17,7 @@ public class ReplicationManager {
     private final String namingServerUrl;
     private final RestTemplate restTemplate;
     private final String storageDirectory;
+
 
     public ReplicationManager(String nodeName, String ipAddress, String namingServerUrl,
                               RestTemplate restTemplate, String storageDirectory) {
@@ -36,13 +38,7 @@ public class ReplicationManager {
                 return;
             }
 
-            long fileCount = Files.list(storagePath)
-                    .filter(Files::isRegularFile)
-                    .peek(path -> System.out.println("Found file: " + path))
-                    .count();
-
-            System.out.println("Replicating " + fileCount + " initial files");
-
+            AtomicInteger replicatedCount = new AtomicInteger();
             Files.list(storagePath)
                     .filter(Files::isRegularFile)
                     .forEach(file -> {
@@ -54,32 +50,41 @@ public class ReplicationManager {
                                 namingServerUrl + "/api/replicate?hash=" + fileHash,
                                 Map.class);
 
-                        if (response != null) {
-                            String targetIp = response.get("ip");
+                        if (response == null || !response.containsKey("ip")) {
+                            System.out.println("No replication target found for file: " + fileName + " (probably alone in ring)");
+                            return;
+                        }
 
-                            if (targetIp.equals(ipAddress)) {
-                                System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
-                                return; // skip dit bestand
-                            }
 
-                            try {
-                                byte[] fileData = Files.readAllBytes(file);
-                                FileReplicator.transferFile(ipAddress, targetIp, fileName, fileData);
+                        String targetIp = response.get("ip");
 
-                                // Update naming server about replication
-                                restTemplate.postForObject(
-                                        namingServerUrl + "/api/files/replicate",
-                                        Map.of(
-                                                "fileName", fileName,
-                                                "ownerIp", ipAddress,
-                                                "replicaIp", targetIp),
-                                        Void.class);
+                        if (targetIp.equals(ipAddress)) {
+                            System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
+                            return; // skip dit bestand
+                        }
 
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
+                        try {
+                            byte[] fileData = Files.readAllBytes(file);
+                            FileReplicator.transferFile(ipAddress, targetIp, fileName, fileData);
+
+                            // Update naming server about replication
+                            restTemplate.postForObject(
+                                    namingServerUrl + "/api/files/replicate",
+                                    Map.of(
+                                            "fileName", fileName,
+                                            "ownerIp", ipAddress,
+                                            "replicaIp", targetIp),
+                                    Void.class);
+
+                            replicatedCount.getAndIncrement();
+
+                        } catch (IOException e) {
+                            System.err.println("Error during file replication: " + fileName);
+                            e.printStackTrace();
                         }
                     });
+            System.out.println("Replicated " + replicatedCount + " file(s) to other node(s)");
+
         } catch (IOException e) {
             System.err.println("Replication error: " + e.getMessage());
         }

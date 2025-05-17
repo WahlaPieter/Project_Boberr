@@ -57,12 +57,23 @@ public class FileReplicator {
                     System.out.println("File receiver listening on port " + port);
                     while (!Thread.currentThread().isInterrupted()) {
                         try (Socket socket = serverSocket.accept();
-                             InputStream in = socket.getInputStream()) {
+                             DataInputStream dis = new DataInputStream(socket.getInputStream())) {
 
-                            byte[] fileData = receiveFile("temp", in);
-                            String fileName = new String(fileData, 0, fileData.length).split("\n")[0];
-                            Files.write(Paths.get(storagePath, fileName),
-                                    fileData, StandardOpenOption.CREATE);
+                            // Lees bestandsnaam
+                            String fileName = dis.readUTF();
+
+                            // Lees bestandsgrootte
+                            int fileSize = dis.readInt();
+
+                            // Lees bytes
+                            byte[] fileData = new byte[fileSize];
+                            dis.readFully(fileData);
+
+                            // Schrijf bestand naar schijf
+                            Path targetPath = Paths.get(storagePath, fileName);
+                            Files.write(targetPath, fileData, StandardOpenOption.CREATE);
+
+                            System.out.println("Received replicated file: " + fileName + " (" + fileSize + " bytes)");
                         }
                     }
                 }

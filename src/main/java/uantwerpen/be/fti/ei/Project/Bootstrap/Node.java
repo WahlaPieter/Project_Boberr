@@ -24,6 +24,7 @@ import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @Profile("node")
@@ -112,10 +113,14 @@ public class Node {
 
                 System.out.println("Registered with NamingServer: " + namingServerUrl);
 
-                nodeCountFuture.orTimeout(2, java.util.concurrent.TimeUnit.SECONDS)
+                nodeCountFuture.orTimeout(2, TimeUnit.SECONDS)
                         .whenComplete((cnt, ex) -> {
-                            if (ex == null)
-                                System.out.println("Ring bevat nu " + cnt + " node(s)");
+                            if (ex == null && cnt != null && cnt > 0) {
+                                System.out.println("Ring bevat nu " + cnt + " node(s) – starten met replicatie...");
+                                replicationManager.replicateInitialFiles();
+                            } else {
+                                System.out.println("Geen replicatie uitgevoerd: ring bevat nog geen andere nodes.");
+                            }
                         });
 
                 // Perform initial replication (keep this)
