@@ -56,35 +56,44 @@ public class NamingServer {
     }
 
     public synchronized boolean removeNode(int hash) {
-        Node node = nodeMap.get(hash);
-        if (node == null) return false;
+        Node doomed = nodeMap.get(hash);
+        if (doomed == null) return false;
 
-        // Transfer files to new responsible nodes
-        String ip = node.getIpAddress();
-        Set<String> files = storedFiles.getOrDefault(ip, Set.of());
-        for (String f : files) {
-            int h = HashingUtil.generateHash(f);
-            String newOwner = findResponsibleNode(h);
-            if (!Objects.equals(newOwner, ip)) {
-                try {
-                    FileReplicator.transferFile(ip, newOwner, f,
-                            FileStorage.readFileBytes(ip, f));
-                    storedFiles.computeIfAbsent(newOwner, k -> new HashSet<>()).add(f);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+        int prevKey = doomed.getPreviousID();
+        int nextKey = doomed.getNextID();
+        Node prev = nodeMap.get(prevKey);
+        Node next = nodeMap.get(nextKey);
+
+        /* 1. ring-pointers bijwerken in het interne nodemap */
+        if (prev != null) prev.setNextID(nextKey);
+        if (next != null) next.setPreviousID(prevKey);
+        nodeMap.remove(hash);
+
+        /* . buren meteen up-to-date zetten via HTTP-unicast */
+        RestTemplate rt = new RestTemplate();
+        try {
+            if (prev != null) {
+                rt.postForObject("http://" + prev.getIpAddress() + ":8081/api/bootstrap/update",
+                        Map.of("updatedField", 2,          // updateNext
+                                "nodeID",       nextKey),   // nieuwe next
+                        Void.class);
             }
+            if (next != null) {
+                rt.postForObject("http://" + next.getIpAddress() + ":8081/api/bootstrap/update",
+                        Map.of("updatedField", 1,          // updatePrevious
+                                "nodeID",       prevKey),   // nieuwe previous
+                        Void.class);
+            }
+        } catch (Exception e) {
+            System.err.println("⚠️  neighbour-update failed: " + e.getMessage());
         }
 
-        Node prev = nodeMap.get(node.getPreviousID());
-        Node next = nodeMap.get(node.getNextID());
-        if (prev != null) prev.setNextID(node.getNextID());
-        if (next != null) next.setPreviousID(node.getPreviousID());
-        nodeMap.remove(hash);
+        /* 3.  opruimen van metadata & bestanden (ongewijzigd) */
+        String ip = doomed.getIpAddress();
         storedFiles.remove(ip);
         saveNodeMap();
-        saveFileMap();
         redistributeFiles();
+        saveFileMap();
         System.out.println("Node removed: " + hash);
         return true;
     }
@@ -185,6 +194,13 @@ public class NamingServer {
         next.getValue().setPreviousID(prev.getKey());
         nodeMap.remove(failedHash);
         storedFiles.remove(failedIp);
+        RestTemplate rt = new RestTemplate();
+        try {
+            rt.postForObject("http://" + prev.getValue().getIpAddress() + ":8081/api/bootstrap/update",
+                    Map.of("updatedField", 2, "nodeID", next.getKey()), Void.class);
+            rt.postForObject("http://" + next.getValue().getIpAddress() + ":8081/api/bootstrap/update",
+                    Map.of("updatedField", 1, "nodeID", prev.getKey()), Void.class);
+        } catch (Exception ignore) {}
         saveNodeMap();
         saveFileMap();
         System.out.println("Handled failure of " + failedIp);
