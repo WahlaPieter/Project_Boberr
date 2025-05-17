@@ -6,6 +6,7 @@ import java.net.MulticastSocket;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 
 public class MulticastReceiver implements Runnable {
+
     private final Node node;
     public MulticastReceiver(Node node) { this.node = node; }
 
@@ -13,27 +14,29 @@ public class MulticastReceiver implements Runnable {
     public void run() {
         try (MulticastSocket socket = new MulticastSocket(MulticastConfig.MULTICAST_PORT)) {
             socket.joinGroup(InetAddress.getByName(MulticastConfig.MULTICAST_ADDRESS));
-            System.out.println("Listening for discovery messages...");
+            System.out.println("📡  listening for discovery …");
+
             byte[] buffer = new byte[256];
 
             while (true) {
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
+                DatagramPacket pkt = new DatagramPacket(buffer, buffer.length);
+                socket.receive(pkt);
 
-                String received = new String(packet.getData(), 0, packet.getLength());
-                String[] parts = received.split(";");
-                if (parts.length == 2) {
-                    String name = parts[0], ip = parts[1];
+                String[] parts = new String(pkt.getData(), 0, pkt.getLength()).split(";");
+                if (parts.length != 2) continue;
 
-                    int newNodeHash = uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil.generateHash(name);
+                String name = parts[0], ip = parts[1];
 
-                    boolean relevant = node.handleDiscovery(name, ip);
-                        node.sendBootstrapResponse(ip, newNodeHash,relevant);
+                /* → laat de Node bepalen wát er veranderde        (bitmask)
+                   bit 0 (1)  = ik ben PREVIOUS voor de nieuwe node
+                   bit 1 (2)  = ik ben NEXT     voor de nieuwe node */
+                int mask = node.handleDiscovery(name, ip);
 
-                }
+                if ((mask & 1) != 0) node.sendBootstrapResponse(ip, 1); // previous
+                if ((mask & 2) != 0) node.sendBootstrapResponse(ip, 2); // next
             }
         } catch (Exception e) {
-            System.err.println("Fout tijdens luisteren naar discovery: " + e.getMessage());
+            System.err.println("discovery-receiver: " + e.getMessage());
             e.printStackTrace();
         }
     }
