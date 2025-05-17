@@ -150,19 +150,22 @@ public class Node {
         System.out.println("Node verwijderd: " + currentID);
     }
 
-    public synchronized boolean handleDiscovery(String newName, String newIp) {
-        if (newName.equals(this.nodeName)) return false;
+    public synchronized int handleDiscovery(String newName, String newIp) {
+        if (newName.equals(nodeName)) return 0;          // zichzelf negeren
         int newHash = HashingUtil.generateHash(newName);
-        boolean updated = false;
-        if (isBetween(previousID, newHash, currentID)) {
-            this.previousID = newHash;
-            updated = true;
-        }
-        if (isBetween(currentID, newHash, nextID)) {
+
+        int changed = 0;
+        // 1️⃣  word ik “previous” voor de nieuwe node?
+        if (isBetween(currentID, newHash, nextID)) {     // ik sta vóór newHash
             this.nextID = newHash;
-            updated = true;
+            changed |= 1;                                // bit 0 → next aangepast
         }
-        return updated;
+        // 2️⃣  word ik “next” voor de nieuwe node?
+        if (isBetween(previousID, newHash, currentID)) { // ik sta ná newHash
+            this.previousID = newHash;
+            changed |= 2;                                // bit 1 → previous aangepast
+        }
+        return changed;
     }
 
     public void setInitialCount(int count){
@@ -178,14 +181,18 @@ public class Node {
         else return target > low || target < high;
     }
 
-    public void sendBootstrapResponse(String destIp, int newHash, boolean updated) {
-        Map<String, Object> resp = Map.of(
-                "updatedField", updated ? (isBetween(currentID, newHash, nextID) ? 1 : 2) : 0,
-                "nodeID", currentID,
-                "previousID", previousID,
-                "nextID", nextID
+    public void sendBootstrapResponse(String destIp, int updatedField) {
+        // updatedField: 1 = ik ben previous   2 = ik ben next
+        Map<String, Object> payload = Map.of(
+                "updatedField", updatedField,
+                "nodeID",       currentID
         );
-        rest.postForObject("http://" + destIp + ":8081/api/bootstrap/update", resp, Void.class);
+        try {
+            rest.postForObject("http://" + destIp + ":8081/api/bootstrap/update",
+                    payload, Void.class);
+        } catch (Exception e) {
+            System.err.println("bootstrap → " + destIp + " : " + e.getMessage());
+        }
     }
 
     public void updatePrevious(int id) { this.previousID = id; }
