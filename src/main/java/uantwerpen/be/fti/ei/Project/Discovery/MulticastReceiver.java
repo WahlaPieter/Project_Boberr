@@ -14,7 +14,7 @@ public class MulticastReceiver implements Runnable {
     public void run() {
         try (MulticastSocket socket = new MulticastSocket(MulticastConfig.MULTICAST_PORT)) {
             socket.joinGroup(InetAddress.getByName(MulticastConfig.MULTICAST_ADDRESS));
-            System.out.println("📡  listening for discovery …");
+            System.out.println("listening for discovery …");
 
             byte[] buffer = new byte[256];
 
@@ -27,13 +27,11 @@ public class MulticastReceiver implements Runnable {
 
                 String name = parts[0], ip = parts[1];
 
-                /* → laat de Node bepalen wát er veranderde        (bitmask)
-                   bit 0 (1)  = ik ben PREVIOUS voor de nieuwe node
-                   bit 1 (2)  = ik ben NEXT     voor de nieuwe node */
-                int mask = node.handleDiscovery(name, ip);
 
-                if ((mask & 1) != 0) node.sendBootstrapResponse(ip, 1); // previous
-                if ((mask & 2) != 0) node.sendBootstrapResponse(ip, 2); // next
+                int mask = node.handleDiscovery(name);
+
+                if ((mask & 1) != 0) node.sendBootstrapResponse(ip, 1); // nextID updated so I am your previous
+                if ((mask & 2) != 0) node.sendBootstrapResponse(ip, 2); // PreviousID updated so I am your next
             }
         } catch (Exception e) {
             System.err.println("discovery-receiver: " + e.getMessage());

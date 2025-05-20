@@ -28,15 +28,13 @@ public class NodeController {
         int field = (int) p.get("updatedField");
         if (field == 1)      node.updatePrevious((int) p.get("nodeID"));
         else if (field == 2) node.updateNext((int) p.get("nodeID"));
-        // bij field==0 verandert er niets, maar we hebben wel de info:
-        // zou kunnen loggen of controleren
         return ResponseEntity.ok().build();
     }
 
     @PostMapping("/files/receive")
     public ResponseEntity<?> receiveFile(@RequestBody FileTransferRequest request) {
         try (InputStream in = new ByteArrayInputStream(request.getData())) {
-            byte[] receivedData = FileReplicator.receiveFile(request.getFileName(), in);
+            byte[] receivedData = FileReplicator.receiveFile(in);
             Files.write(Paths.get("/storage", request.getFileName()), receivedData);
             return ResponseEntity.ok().build();
         } catch (IOException e) {
@@ -44,7 +42,6 @@ public class NodeController {
         }
     }
 
-    // nieuwe mapping in NodeController
     @PostMapping("/info")
     public ResponseEntity<Void> receiveCount(@RequestBody Map<String,Integer> m){
         node.setInitialCount(m.get("count"));

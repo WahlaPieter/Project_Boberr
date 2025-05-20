@@ -55,12 +55,11 @@ public class ReplicationManager {
                             return;
                         }
 
-
                         String targetIp = response.get("ip");
 
                         if (targetIp.equals(ipAddress)) {
                             System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
-                            return; // skip dit bestand
+                            return;
                         }
 
                         try {
@@ -102,7 +101,7 @@ public class ReplicationManager {
 
             if (targetIp.equals(ipAddress)) {
                 System.out.println("Skipping replication of " + fileName + ": target is self (" + targetIp + ")");
-                return; // skip replicatie naar zichzelf
+                return;
             }
 
             try {

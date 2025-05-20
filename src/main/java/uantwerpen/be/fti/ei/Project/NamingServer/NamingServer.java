@@ -64,31 +64,31 @@ public class NamingServer {
         Node prev = nodeMap.get(prevKey);
         Node next = nodeMap.get(nextKey);
 
-        /* 1. ring-pointers bijwerken in het interne nodemap */
+        // update pointers
         if (prev != null) prev.setNextID(nextKey);
         if (next != null) next.setPreviousID(prevKey);
         nodeMap.remove(hash);
 
-        /* . buren meteen up-to-date zetten via HTTP-unicast */
+        // let neighbours know
         RestTemplate rt = new RestTemplate();
         try {
             if (prev != null) {
-                rt.postForObject("http://" + prev.getIpAddress() + ":8081/api/bootstrap/update",
+                rt.postForObject("http://" + prev.getIpAddress() + ":8081/api/bootstrap/update", // Update the previous node with a new next
                         Map.of("updatedField", 2,          // updateNext
-                                "nodeID",       nextKey),   // nieuwe next
+                                "nodeID",       nextKey),   // new next
                         Void.class);
             }
             if (next != null) {
-                rt.postForObject("http://" + next.getIpAddress() + ":8081/api/bootstrap/update",
+                rt.postForObject("http://" + next.getIpAddress() + ":8081/api/bootstrap/update", // Update the next node with a new previous
                         Map.of("updatedField", 1,          // updatePrevious
-                                "nodeID",       prevKey),   // nieuwe previous
+                                "nodeID",       prevKey),   // new previous
                         Void.class);
             }
         } catch (Exception e) {
             System.err.println("⚠️  neighbour-update failed: " + e.getMessage());
         }
 
-        /* 3.  opruimen van metadata & bestanden (ongewijzigd) */
+
         String ip = doomed.getIpAddress();
         storedFiles.remove(ip);
         saveNodeMap();
@@ -164,7 +164,7 @@ public class NamingServer {
 
                 if (Files.exists(sourcePath)) {
                     try {
-                        Files.createDirectories(targetPath.getParent()); // maak map aan als die nog niet bestaat
+                        Files.createDirectories(targetPath.getParent());
                         Files.move(sourcePath, targetPath, StandardCopyOption.REPLACE_EXISTING);
 
                         storedFiles.get(src).remove(f);
@@ -211,7 +211,7 @@ public class NamingServer {
             while (true) {
                 new HashMap<>(nodeMap).forEach((hash, node) -> {
                     if (!isAlive(node.getIpAddress())) {
-                        System.out.println("Node failure gedetecteerd: " + node.getIpAddress());
+                        System.out.println("Node failure detected: " + node.getIpAddress());
                         handleNodeFailure(hash, node.getIpAddress());
                     }
                 });
@@ -224,7 +224,6 @@ public class NamingServer {
 
     private boolean isAlive(String ip) {
         try {
-            // eenvoudig REST‐probe
             restTemplate.getForEntity("http://" + ip + ":8081/actuator/health", String.class);
             return true;
         } catch (Exception e) {
@@ -239,10 +238,10 @@ public class NamingServer {
 
     public synchronized String getNodeForReplication(int hash) {
         if (nodeMap.isEmpty() || nodeMap.size() == 1) {
-            return null; // Geen replicatie mogelijk
+            return null;
         }
 
-        // Vind eigenaar van bestand
+        // find owner of the file
         Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingKey(hash) != null
                 ? nodeMap.ceilingEntry(hash)
                 : nodeMap.firstEntry();
@@ -250,15 +249,14 @@ public class NamingServer {
         Node owner = ownerEntry.getValue();
         Node replica = nodeMap.get(owner.getNextID());
 
-        // Probeer andere node dan eigenaar
+        // try new node for replication
         int attempts = 0;
         while (replica.getIpAddress().equals(owner.getIpAddress())) {
             replica = nodeMap.get(replica.getNextID());
             attempts++;
 
             if (attempts >= nodeMap.size()) {
-                // ring rondgegaan, niemand gevonden
-                System.out.println("Geen geldige replica: iedereen is eigenaar");
+                System.out.println("No fitting replica: everyone is owner");
                 return null;
             }
         }
@@ -275,7 +273,7 @@ public class NamingServer {
         saveFileMap();
     }
 
-    public synchronized void removeFileReplica(String fileName, String replicaIp) {
+    public synchronized void removeFileReplica(String fileName) {
         storedFiles.entrySet().stream()
                 .filter(e -> e.getValue().contains(fileName))
                 .findFirst()

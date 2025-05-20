@@ -36,10 +36,10 @@ public class NamingMulticastReceiver implements Runnable {
                 if (parts.length != 2) continue;
                 String nodeName = parts[0], ip = parts[1];
 
-                // 1. addNode() geeft true als nieuw
+
                 boolean added = namingServer.addNode(nodeName, ip);
 
-                // 2. stuur #nodes terug via unicast HTTP
+                // Send node via rest
                 int count = namingServer.getNodeMap().size() - 1;
                 try {
                     String url = "http://" + ip + ":8081/api/bootstrap/info";

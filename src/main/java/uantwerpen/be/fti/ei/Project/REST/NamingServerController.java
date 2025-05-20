@@ -81,9 +81,8 @@ public class NamingServerController {
     }
     @DeleteMapping("/files/{fileName}/replicas/{replicaIp}")
     public ResponseEntity<?> removeReplica(
-            @PathVariable String fileName,
-            @PathVariable String replicaIp) {
-        namingServer.removeFileReplica(fileName, replicaIp);
+            @PathVariable String fileName) {
+        namingServer.removeFileReplica(fileName);
         return ResponseEntity.ok().build();
     }
     @GetMapping("/nodes/{hash}/replicated")

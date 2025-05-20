@@ -24,11 +24,10 @@ public class FileReplicator {
         }
     }
 
-    public static byte[] receiveFile(String fileName, InputStream in) throws IOException {
+    public static byte[] receiveFile(InputStream in) throws IOException {
         try (DataInputStream dis = new DataInputStream(in);
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
 
-            String receivedFileName = dis.readUTF();
             int fileSize = dis.readInt();
 
             byte[] buffer = new byte[4096];
@@ -59,17 +58,15 @@ public class FileReplicator {
                         try (Socket socket = serverSocket.accept();
                              DataInputStream dis = new DataInputStream(socket.getInputStream())) {
 
-                            // Lees bestandsnaam
                             String fileName = dis.readUTF();
 
-                            // Lees bestandsgrootte
                             int fileSize = dis.readInt();
 
-                            // Lees bytes
+                            // read bytes
                             byte[] fileData = new byte[fileSize];
                             dis.readFully(fileData);
 
-                            // Schrijf bestand naar schijf
+                            // Write file to disk
                             Path targetPath = Paths.get(storagePath, fileName);
                             Files.write(targetPath, fileData, StandardOpenOption.CREATE);
 

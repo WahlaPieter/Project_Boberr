@@ -30,16 +30,13 @@ import java.util.concurrent.TimeUnit;
 @Profile("node")
 public class Node {
 
-    /* ------------- ring info ------------- */
     private int currentID;
     private int previousID;
     private int nextID;
 
-    /* ------------- identiteit ------------- */
     private String nodeName;
     private String ipAddress;
 
-    /* ------------- runtime-only state (NIET serialiseren) ------------- */
     private transient ReplicationManager replicationManager;   // lab 5
     private transient FileWatcher        fileWatcher;          // lab 5
     private transient CompletableFuture<Integer> nodeCountFuture = new CompletableFuture<>();
@@ -66,8 +63,8 @@ public class Node {
         this.previousID = currentID;
         this.nextID = currentID;
 
-        // Create storage directory with proper path handling
-        Path storagePath = Paths.get("storage").toAbsolutePath(); // Changed to relative path
+        // Create storage directory
+        Path storagePath = Paths.get("storage").toAbsolutePath();
         try {
             if (!Files.exists(storagePath)) {
                 Files.createDirectories(storagePath);
@@ -80,7 +77,7 @@ public class Node {
             throw new RuntimeException("Storage directory initialization failed", e);
         }
 
-        // Initialize components with consistent path
+
         this.replicationManager = new ReplicationManager(
                 nodeName, ipAddress, namingServerUrl, rest, storagePath.toString());
         this.fileWatcher = new FileWatcher(storagePath.toString(), replicationManager);
@@ -92,12 +89,12 @@ public class Node {
 
     @EventListener(ApplicationReadyEvent.class)
     public void bootstrap() {
-        // Start multicast listener (keep this)
+        // Start multicast listener
         Thread listener = new Thread(new MulticastReceiver(this));
         listener.setDaemon(true);
         listener.start();
 
-        // Start file watcher (keep this - fixed version)
+        // Start file watcher
         Thread watcherThread = new Thread(fileWatcher);
         watcherThread.setDaemon(true);
         watcherThread.start();
@@ -108,7 +105,7 @@ public class Node {
                 // Wait for other nodes to potentially start
                 Thread.sleep(3000);  // 3 second delay
 
-                /* stap 1 – multicast zodat NamingServer ons registreert */
+
                 MulticastSender.sendDiscoveryMessage(nodeName, ipAddress);
 
                 System.out.println("Registered with NamingServer: " + namingServerUrl);
@@ -116,10 +113,10 @@ public class Node {
                 nodeCountFuture.orTimeout(2, TimeUnit.SECONDS)
                         .whenComplete((cnt, ex) -> {
                             if (ex == null && cnt != null && cnt > 0) {
-                                System.out.println("Ring bevat nu " + cnt + " node(s) – starten met replicatie...");
+                                System.out.println("Ring has " + cnt + " node(s) – starting with replication...");
                                 replicationManager.replicateInitialFiles();
                             } else {
-                                System.out.println("Geen replicatie uitgevoerd: ring bevat nog geen andere nodes.");
+                                System.out.println("No replication: ring doesn't have any nodes.");
                             }
                         });
 
@@ -136,34 +133,38 @@ public class Node {
 
     @PreDestroy
     public void onShutdown() {
-        System.out.println("Graceful shutdown van node: " + nodeName);
+        System.out.println("Graceful shutdown of node: " + nodeName);
 
-        // update buren in NamingServer
+        // update neighbors
         if (previousID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + previousID + "/next", nextID);
         }
         if (nextID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + nextID + "/previous", previousID);
         }
-        // deregistreer
+
         rest.delete(namingServerUrl + "/api/nodes/" + currentID);
-        System.out.println("Node verwijderd: " + currentID);
+        System.out.println("Node deletet: " + currentID);
     }
 
-    public synchronized int handleDiscovery(String newName, String newIp) {
-        if (newName.equals(nodeName)) return 0;          // zichzelf negeren
+    public synchronized int handleDiscovery(String newName) {
+        if (newName.equals(nodeName)) return 0;          // ignore self
         int newHash = HashingUtil.generateHash(newName);
 
         int changed = 0;
-        // 1️⃣  word ik “previous” voor de nieuwe node?
-        if (isBetween(currentID, newHash, nextID)) {     // ik sta vóór newHash
-            this.nextID = newHash;
-            changed |= 1;                                // bit 0 → next aangepast
+        if (isBetween(currentID, newHash, nextID)) {  // I come before the new node
+            this.nextID = newHash; // Next changed
+            changed = 1;
         }
-        // 2️⃣  word ik “next” voor de nieuwe node?
-        if (isBetween(previousID, newHash, currentID)) { // ik sta ná newHash
-            this.previousID = newHash;
-            changed |= 2;                                // bit 1 → previous aangepast
+        if (isBetween(previousID, newHash, currentID)) {  // I come after the new node
+            this.previousID = newHash; // Previous changed
+
+            // If we already set nextID before, mark both changes (1 | 2 = 3)
+            if (changed == 1) {
+                changed = 3; // Previous and next changed
+            } else {
+                changed = 2;
+            }
         }
         return changed;
     }
@@ -182,7 +183,7 @@ public class Node {
     }
 
     public void sendBootstrapResponse(String destIp, int updatedField) {
-        // updatedField: 1 = ik ben previous   2 = ik ben next
+        // updatedField: 1 = previous   2 = next
         Map<String, Object> payload = Map.of(
                 "updatedField", updatedField,
                 "nodeID",       currentID

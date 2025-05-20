@@ -4,7 +4,7 @@ public class FileTransferRequest {
     public String fileName;
     public byte[] data;
 
-    public FileTransferRequest() {} // nodig voor JSON (de)serialisatie
+    public FileTransferRequest() {} // JSON (de)serialisation (convert string -> object)
 
     public FileTransferRequest(String fileName, byte[] data) {
         this.fileName = fileName;
