@@ -36,9 +36,15 @@ public class NamingServer {
 
     @PostConstruct
     public void init() {
+        if (nodeMap.isEmpty()) {
+            fileLogs.clear();
+            JsonService.saveFileLogs(fileLogs);
+            System.out.println("Previous File logs are deleted");
+        }
         updateRingPointers();
         redistributeFiles();
         startFailureDetection();
+
 
     }
 
