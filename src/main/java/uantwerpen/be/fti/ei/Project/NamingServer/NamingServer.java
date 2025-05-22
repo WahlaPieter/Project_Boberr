@@ -98,6 +98,21 @@ public class NamingServer {
         saveNodeMap();
         redistributeFiles();
         saveFileMap();
+        for (Map.Entry<String, FileLogEntry> entry : fileLogs.entrySet()) {
+            String file = entry.getKey();
+            FileLogEntry log = entry.getValue();
+
+            // Als de verwijderde node de owner was, wijs nieuwe toe
+            if (log.getOwner().equals(ip)) {
+                String newOwner = getNextValidOwner(file, ip); // helper nodig
+                log.setOwner(newOwner);
+                log.addDownloadLocation(newOwner);
+            }
+
+            // Verwijder als downloadLocation
+            log.removeDownloadLocation(ip);
+        }
+        JsonService.saveFileLogs(fileLogs);
         System.out.println("Node removed: " + hash);
         return true;
     }
@@ -323,6 +338,27 @@ public class NamingServer {
 
     public Map<String, FileLogEntry> getFileLogs() {
         return fileLogs;
+    }
+
+    private String getNextValidOwner(String file, String excludedIp) {
+        int hash = HashingUtil.generateHash(file);
+
+        for (Map.Entry<Integer, Node> entry : nodeMap.tailMap(hash, true).entrySet()) {
+            String ip = entry.getValue().getIpAddress();
+            if (!ip.equals(excludedIp)) {
+                return ip;
+            }
+        }
+
+        // fallback: first node that is available  ≠ excluded
+        for (Node node : nodeMap.values()) {
+            String ip = node.getIpAddress();
+            if (!ip.equals(excludedIp)) {
+                return ip;
+            }
+        }
+
+        return null;
     }
 
 }
