@@ -6,6 +6,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
+import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 
 import java.util.Map;
 
@@ -101,6 +102,10 @@ public class NamingServerController {
                 "fileHash", fileHash,
                 "targetNode", target
         ));
+    }
+    @GetMapping("/filelogs")
+    public Map<String, FileLogEntry> getFileLogs() {
+        return namingServer.getFileLogs();
     }
 
 }

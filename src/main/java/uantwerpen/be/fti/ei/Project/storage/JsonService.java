@@ -3,9 +3,11 @@ package uantwerpen.be.fti.ei.Project.storage;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
+import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 
 import java.io.*;
 import java.lang.reflect.Type;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -44,4 +46,21 @@ public class JsonService {
             return gson.fromJson(r, type);
         } catch (IOException e) { e.printStackTrace(); return new TreeMap<>(); }
     }
+    public static void saveFileLogs(Map<String, FileLogEntry> logs) {
+        try (Writer writer = new FileWriter("file_logs.json")) {
+            new Gson().toJson(logs, writer);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public static Map<String, FileLogEntry> loadFileLogs() {
+        try (Reader reader = new FileReader("file_logs.json")) {
+            Type type = new TypeToken<Map<String, FileLogEntry>>(){}.getType();
+            return new Gson().fromJson(reader, type);
+        } catch (IOException e) {
+            return new HashMap<>();
+        }
+    }
+
 }

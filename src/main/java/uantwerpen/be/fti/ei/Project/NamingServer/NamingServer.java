@@ -6,6 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.stereotype.Component;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
+import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
 import uantwerpen.be.fti.ei.Project.storage.JsonService;
@@ -25,10 +26,12 @@ public class NamingServer {
 
     private final TreeMap<Integer, Node> nodeMap;
     private final Map<String, Set<String>> storedFiles;
+    private Map<String, FileLogEntry> fileLogs = new HashMap<>();
 
     public NamingServer() {
         this.nodeMap = JsonService.loadFromJson();
         this.storedFiles = JsonService.loadStoredFiles();
+        this.fileLogs = JsonService.loadFileLogs();
     }
 
     @PostConstruct
@@ -36,6 +39,7 @@ public class NamingServer {
         updateRingPointers();
         redistributeFiles();
         startFailureDetection();
+
     }
 
     public synchronized boolean addNode(String nodeName, String ipAddress) {
@@ -105,7 +109,11 @@ public class NamingServer {
         try {
             FileStorage.storeFile(ip, fileName, "Content: " + fileName);
             storedFiles.get(ip).add(fileName);
+            fileLogs.putIfAbsent(fileName, new FileLogEntry(ip));
+            fileLogs.get(fileName).addDownloadLocation(ip);
+            JsonService.saveFileLogs(fileLogs);
             saveFileMap();
+
             return true;
         } catch (IOException e) {
             e.printStackTrace();
@@ -169,6 +177,12 @@ public class NamingServer {
 
                         storedFiles.get(src).remove(f);
                         storedFiles.computeIfAbsent(dst, k -> new HashSet<>()).add(f);
+
+                        fileLogs.putIfAbsent(f, new FileLogEntry(dst));
+                        fileLogs.get(f).removeDownloadLocation(src);
+                        fileLogs.get(f).setOwner(dst);
+                        fileLogs.get(f).addDownloadLocation(dst);
+                        JsonService.saveFileLogs(fileLogs);
 
                         System.out.println("Files redistributed: " + f + " van " + src + " → " + dst);
                     } catch (IOException e) {
@@ -238,6 +252,7 @@ public class NamingServer {
 
     public synchronized String getNodeForReplication(int hash) {
         if (nodeMap.isEmpty() || nodeMap.size() == 1) {
+            System.out.println("nodeMap is empty");
             return null;
         }
 
@@ -270,6 +285,10 @@ public class NamingServer {
         if (!ownerIp.equals(replicaIp)) {
             storedFiles.computeIfAbsent(replicaIp, k -> new HashSet<>()).add(fileName);
         }
+        fileLogs.putIfAbsent(fileName, new FileLogEntry(ownerIp));
+        fileLogs.get(fileName).addDownloadLocation(replicaIp);
+        JsonService.saveFileLogs(fileLogs);
+
         saveFileMap();
     }
 
@@ -301,4 +320,9 @@ public class NamingServer {
 
         return replicatedFiles;
     }
+
+    public Map<String, FileLogEntry> getFileLogs() {
+        return fileLogs;
+    }
+
 }
