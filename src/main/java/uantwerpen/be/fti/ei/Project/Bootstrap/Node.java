@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import uantwerpen.be.fti.ei.Project.Agents.SyncAgent;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastSender;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
@@ -129,6 +130,22 @@ public class Node {
                 System.err.println("Bootstrap error: " + e.getMessage());
             }
         }).start();
+
+        // Start SyncAgent op deze node
+        try {
+            // TIJDELIJK: handmatig IP van volgende node invullen
+            String nextNodeIp = getIpFromNodeId(nextID);
+            String nextNodeUrl = "http://" + nextNodeIp + ":8081";
+
+            SyncAgent syncAgent = new SyncAgent(ipAddress, nextNodeUrl, "nodes_storage/" + ipAddress, rest);
+            Thread syncThread = new Thread(syncAgent);
+            syncThread.setDaemon(true);
+            syncThread.start();
+
+            System.out.println("[Node] SyncAgent gestart op " + ipAddress + " → synchroniseert met " + nextNodeIp);
+        } catch (Exception e) {
+            System.err.println("[Node] Fout bij starten van SyncAgent: " + e.getMessage());
+        }
     }
 
     @PreDestroy
@@ -195,6 +212,19 @@ public class Node {
             System.err.println("bootstrap → " + destIp + " : " + e.getMessage());
         }
     }
+    // Voor syncAgent
+    private String getIpFromNodeId(int nodeId) {
+        try {
+            String url = namingServerUrl + "/api/nodes/" + nodeId;
+            Map<String, Object> response = rest.getForObject(url, Map.class);
+            return (String) response.get("ipAddress");
+        } catch (Exception e) {
+            System.err.println("[Node] Fout bij ophalen van IP voor nodeID " + nodeId + ": " + e.getMessage());
+            return "127.0.0.1"; // fallback
+        }
+    }
+
+
 
     public void updatePrevious(int id) { this.previousID = id; }
     public void updateNext(int id) { this.nextID = id; }
