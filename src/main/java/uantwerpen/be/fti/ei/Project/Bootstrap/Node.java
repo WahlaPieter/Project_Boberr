@@ -133,7 +133,7 @@ public class Node {
     @PreDestroy
     public void onShutdown() {
         System.out.println("Graceful shutdown of node: " + nodeName);
-        replicationManager.notifyNamingServerOfShutdown();
+        replicationManager.transferReplicasToPreviousNodeOnShutdown();
         // update neighbors
         if (previousID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + previousID + "/next", nextID);
