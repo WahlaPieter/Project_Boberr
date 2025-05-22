@@ -44,7 +44,6 @@ public class Node {
     @Autowired
     private transient RestTemplate rest;
 
-    /* ------------- config ------------- */
     @Value("${storage.path}")
     private String storagePath;
 
@@ -134,7 +133,7 @@ public class Node {
     @PreDestroy
     public void onShutdown() {
         System.out.println("Graceful shutdown of node: " + nodeName);
-
+        replicationManager.notifyNamingServerOfShutdown();
         // update neighbors
         if (previousID != currentID) {
             rest.put(namingServerUrl + "/api/nodes/" + previousID + "/next", nextID);
@@ -145,6 +144,27 @@ public class Node {
 
         rest.delete(namingServerUrl + "/api/nodes/" + currentID);
         System.out.println("Node deletet: " + currentID);
+    }
+
+    public boolean deleteLocalFile(String fileName){
+        Path filePath = Paths.get(storagePath, fileName);
+        try {
+            if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
+                Files.delete(filePath);
+                System.out.println("Node '" + nodeName + "': Successfully deleted local file: " + filePath.toAbsolutePath());
+                // Also remove from FileWatcher's knownFiles if it's managing that accurately
+                if (fileWatcher != null) { // If fileWatcher instance is available
+                    fileWatcher.removeKnownFile(fileName);
+                }
+                return true;
+            } else {
+                System.out.println("Node '" + nodeName + "': Local file to delete not found or not a file: " + filePath.toAbsolutePath());
+                return false; // Or true if "not found" is considered success for deletion
+            }
+        } catch (IOException e) {
+            System.err.println("Node '" + nodeName + "': Error deleting local file '" + fileName + "': " + e.getMessage());
+            return false;
+        }
     }
 
     public synchronized int handleDiscovery(String newName) {

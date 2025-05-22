@@ -319,14 +319,89 @@ public class NamingServer {
         saveFileMap();
     }
 
-    public synchronized void removeFileReplica(String fileName) {
-        storedFiles.entrySet().stream()
-                .filter(e -> e.getValue().contains(fileName))
-                .findFirst()
-                .ifPresent(entry -> {
-                    entry.getValue().remove(fileName);
-                    saveFileMap();
-                });
+    public synchronized void removeFileReplica(String fileName, String replicaIpAddress) {
+        if (replicaIpAddress == null || fileName == null) {
+            System.err.println("NamingServer: removeFileReplica called with null fileName or replicaIpAddress.");
+            return;
+        }
+
+        Set<String> filesOnReplicaNode = storedFiles.get(replicaIpAddress);
+        if (filesOnReplicaNode != null) {
+            if (filesOnReplicaNode.remove(fileName)) {
+                System.out.println("NamingServer: Removed replica record of '" + fileName + "' from node: " + replicaIpAddress);
+                if (filesOnReplicaNode.isEmpty()) {
+                    // Optionally remove the IP entry if it has no more files
+                    // storedFiles.remove(replicaIpAddress);
+                }
+                saveFileMap();
+
+                // NOW, CRITICAL STEP: Notify the OWNER to delete its replica IF this was the only replica
+                // or if the replication strategy requires it.
+                // This is the part that makes the deletion "register at another node" (the owner).
+
+                // 1. Find the actual owner of 'fileName'
+                String ownerIp = findFileOwner(fileName); // You need a method for this
+
+                if (ownerIp != null && !ownerIp.equals(replicaIpAddress)) {
+                    // If the owner is different from the node that just deleted its replica
+                    System.out.println("NamingServer: File '" + fileName + "' owner is " + ownerIp +
+                            ". Notifying owner about replica deletion at " + replicaIpAddress + ".");
+
+                    // The Naming Server needs to tell the OWNER node to delete its copy of the file.
+                    // This requires the OWNER node to have a REST endpoint for this.
+                    // Example: POST http://<ownerIp>:<ownerPort>/api/files/delete-local-copy
+                    // (This endpoint needs to be implemented on the Node application)
+                    try {
+                        Node ownerNode = getNodeByIp(ownerIp); // Helper to get owner's port etc.
+                        if (ownerNode != null) {
+                            // Construct the payload for the owner node.
+                            // The owner node needs to know which file to delete locally.
+                            Map<String, String> deletePayload = Map.of("fileName", fileName);
+                            String ownerDeleteUrl = "http://" + ownerIp + ":8081/node/files/delete-local-copy";
+
+                            System.out.println("NamingServer: Instructing owner " + ownerIp + " to delete local copy of " + fileName);
+                            restTemplate.postForObject(ownerDeleteUrl, deletePayload, String.class); // Or DELETE if appropriate
+                        } else {
+                            System.err.println("NamingServer: Could not find owner node details for IP: " + ownerIp);
+                        }
+                    } catch (Exception e) {
+                        System.err.println("NamingServer: Failed to instruct owner " + ownerIp + " to delete file '" + fileName + "': " + e.getMessage());
+                    }
+                } else if (ownerIp != null && ownerIp.equals(replicaIpAddress)) {
+                    System.out.println("NamingServer: Node " + replicaIpAddress + " deleted its OWN copy of '" + fileName + "'. No other owner to notify to delete.");
+                    // If the owner itself deleted its only copy, other replicas might become owners or be deleted.
+                    // This depends on your system's consistency model.
+                }
+
+            } else {
+                System.out.println("NamingServer: File '" + fileName + "' not found in replica records of node: " + replicaIpAddress);
+            }
+        } else {
+            System.out.println("NamingServer: Node " + replicaIpAddress + " not found in storedFiles map or has no files recorded.");
+        }
+    }
+
+    private synchronized String findFileOwner(String fileName) {
+        // This logic needs to be consistent with how ownership is decided.
+        // Typically, the node whose hash is closest to (and >=) fileHash, wrapping around.
+        // This is similar to findResponsibleNode but specifically for ownership.
+        int fileHash = HashingUtil.generateHash(fileName);
+        if (nodeMap.isEmpty()) return null;
+
+        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingEntry(fileHash);
+        if (ownerEntry == null) {
+            ownerEntry = nodeMap.firstEntry();
+        }
+        return ownerEntry != null ? ownerEntry.getValue().getIpAddress() : null;
+    }
+
+    private synchronized Node getNodeByIp(String ipAddress) {
+        for (Node node : nodeMap.values()) {
+            if (node.getIpAddress().equals(ipAddress)) {
+                return node; // Assuming Node object in map has getHttpPort()
+            }
+        }
+        return null;
     }
 
     public List<Map<String, String>> getReplicatedFilesForNode(int hash) {
