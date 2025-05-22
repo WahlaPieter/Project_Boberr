@@ -136,7 +136,9 @@ public class NamingServer {
         try {
             FileStorage.storeFile(ip, fileName, "Content: " + fileName);
             storedFiles.get(ip).add(fileName);
-            fileLogs.putIfAbsent(fileName, new FileLogEntry(ip));
+            if (ip != null) {
+                fileLogs.putIfAbsent(fileName, new FileLogEntry(ip));
+            }
             fileLogs.get(fileName).addDownloadLocation(ip);
             JsonService.saveFileLogs(fileLogs);
             saveFileMap();
@@ -205,10 +207,12 @@ public class NamingServer {
                         storedFiles.get(src).remove(f);
                         storedFiles.computeIfAbsent(dst, k -> new HashSet<>()).add(f);
 
-                        fileLogs.putIfAbsent(f, new FileLogEntry(dst));
-                        fileLogs.get(f).removeDownloadLocation(src);
-                        fileLogs.get(f).setOwner(dst);
-                        fileLogs.get(f).addDownloadLocation(dst);
+                        if (dst != null) {
+                            fileLogs.putIfAbsent(f, new FileLogEntry(dst));
+                            fileLogs.get(f).removeDownloadLocation(src);
+                            fileLogs.get(f).setOwner(dst);
+                            fileLogs.get(f).addDownloadLocation(dst);
+                        }
                         JsonService.saveFileLogs(fileLogs);
 
                         System.out.println("Files redistributed: " + f + " van " + src + " → " + dst);
@@ -312,8 +316,12 @@ public class NamingServer {
         if (!ownerIp.equals(replicaIp)) {
             storedFiles.computeIfAbsent(replicaIp, k -> new HashSet<>()).add(fileName);
         }
-        fileLogs.putIfAbsent(fileName, new FileLogEntry(ownerIp));
-        fileLogs.get(fileName).addDownloadLocation(replicaIp);
+        if (ownerIp != null) {
+            fileLogs.putIfAbsent(fileName, new FileLogEntry(ownerIp));
+        }
+        if (replicaIp != null) {
+            fileLogs.get(fileName).addDownloadLocation(replicaIp);
+        }
         JsonService.saveFileLogs(fileLogs);
 
         saveFileMap();
