@@ -2,8 +2,10 @@ package uantwerpen.be.fti.ei.Project.REST;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
@@ -79,12 +81,14 @@ public class NamingServerController {
                 payload.get("replicaIp"));
         return ResponseEntity.ok().build();
     }
+
     @DeleteMapping("/files/{fileName}/replicas/{replicaIp}")
     public ResponseEntity<?> removeReplica(
-            @PathVariable String fileName) {
-        namingServer.removeFileReplica(fileName);
+            @PathVariable String fileName, @PathVariable String replicaIp) {
+        namingServer.removeFileReplica(fileName, replicaIp);
         return ResponseEntity.ok().build();
     }
+
     @GetMapping("/nodes/{hash}/replicated")
     public ResponseEntity<?> getReplicatedFiles(@PathVariable int hash) {
         var replicas = namingServer.getReplicatedFilesForNode(hash);
@@ -102,5 +106,4 @@ public class NamingServerController {
                 "targetNode", target
         ));
     }
-
 }

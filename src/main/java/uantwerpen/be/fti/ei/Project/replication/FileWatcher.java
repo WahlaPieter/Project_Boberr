@@ -82,7 +82,7 @@ public class FileWatcher implements Runnable {
                         // After delay, check if file still exists and is a regular file
                         if (Files.exists(fullPath) && Files.isRegularFile(fullPath)) {
                             System.out.println("FileWatcher: File '" + fileName + "' settled. Processing addition/modification.");
-                            manager.handleFileAddition(fileName);
+                            manager.handleFileAdditionOrModification(fileName);
                             knownFiles.add(fileName);
                         } else {
                             System.out.println("FileWatcher: File '" + fileName + "' no longer exists or is not a regular file after settle delay. It might have been a temporary file or deleted quickly.");
@@ -115,5 +115,9 @@ public class FileWatcher implements Runnable {
             e.printStackTrace();
         }
         System.out.println("FileWatcher: Watcher thread for " + dir + " finished.");
+    }
+
+    public void removeKnownFile(String fileName){
+        knownFiles.remove(fileName);
     }
 }
