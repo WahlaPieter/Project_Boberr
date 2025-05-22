@@ -21,11 +21,8 @@ public class ReplicationManager {
     private final String ipAddress;
     private final String namingServerUrl;
     private final RestTemplate restTemplate;
-    private final String storageDirectory; // Absolute path
-
-    // Placeholder: This needs to be the actual listening port of the target's FileReplicator
-    // This should ideally be discovered or configured per node.
-    private final int DEFAULT_TARGET_FILE_RECEIVER_PORT = 8090; // <<--- EXAMPLE - NEEDS REAL SOLUTION
+    private final String storageDirectory;
+    private final int DEFAULT_TARGET_FILE_RECEIVER_PORT = 8082;
 
     public ReplicationManager(String nodeName, String ipAddress, String namingServerUrl,
                               RestTemplate restTemplate, String storageDirectory) {
@@ -152,74 +149,119 @@ public class ReplicationManager {
 
     // --- Phase 2: Update - Handle file deletions from local storage ---
     public void handleFileDeletion(String fileName) {
-        System.out.println("Node '" + nodeName + "': Handling deletion of local file/replica: " + fileName);
+        System.out.println("Node '" + nodeName + "': Handling deletion of local file: " + fileName + ". Notifying Naming Server.");
         try {
-            // Inform Naming Server that this node (ipAddress) no longer holds a replica/copy of 'fileName'.
-            // The Naming Server then needs to update its records. If this node was the owner,
-            // the NS might need to trigger deletion from other replicas or assign a new owner.
-            // Slide 4: "if deleted, it has to be deleted from the replicated files of the file owner as well."
-            // This implies this node tells the NS, and the NS coordinates with the owner.
-            String deleteFileRecordUrl = namingServerUrl + "/api/files/" + fileName + "/locations/" + ipAddress; // Hypothetical more precise endpoint
-            // Your current endpoint: namingServerUrl + "/api/files/" + fileName + "/replicas/" + ipAddress
-            // This seems to mean "remove ipAddress as a replica location for fileName"
-            restTemplate.delete(namingServerUrl + "/api/files/" + fileName + "/replicas/" + ipAddress);
-            System.out.println("Node '" + nodeName + "': Notified Naming Server of local file/replica deletion for '" + fileName + "'.");
+            // Tell NS that this node (ipAddress) no longer has 'fileName'.
+            // NS will update its records. If this node was an owner or important replica, NS might trigger other actions.
+            String deleteFileLocationUrl = namingServerUrl + "/api/files/" + fileName + "/locations/" + ipAddress;
+            restTemplate.delete(deleteFileLocationUrl);
+            System.out.println("Node '" + nodeName + "': Notified Naming Server that '" + fileName + "' is no longer at " + ipAddress + ".");
         } catch (Exception e) {
-            System.err.println("Node '" + nodeName + "': Error notifying Naming Server of file/replica deletion for '" + fileName + "': " + e.getMessage());
+            System.err.println("Node '" + nodeName + "': Error notifying Naming Server of local file deletion for '" + fileName + "': " + e.getMessage());
         }
     }
 
 
-    public void notifyNamingServerOfShutdown() {
-        System.out.println("Node '" + nodeName + "' (IP: " + ipAddress + "): Notifying Naming Server about replicas held before shutdown.");
 
-        // 1. Get the list of files this node is currently storing (acting as a replica for).
-        // The endpoint "/api/nodes/{hash}/replicated" should return files this node has.
-        // Each map should contain at least "fileName".
-        String listReplicasUrl = namingServerUrl + "/api/nodes/" + HashingUtil.generateHash(nodeName) + "/replicated";
+    public void transferReplicasToPreviousNodeOnShutdown() {
+        System.out.println("Node '" + nodeName + "' (IP: " + ipAddress + "): Initiating transfer of its REPLICAS to previous node due to shutdown.");
+
+        // 1. Get the list of files that THIS node is holding as a REPLICA.
+        //    This means the Naming Server considers another node to be the "owner" of these files.
+        //    The endpoint should return: List of {"fileName": "name.txt", "originalOwnerIp": "ip_of_actual_owner"}
+        String listHeldReplicasUrl = namingServerUrl + "/api/nodes/ip/" + ipAddress + "/held-replicas"; // NEW/MODIFIED Endpoint needed on NS
         List<Map<String, String>> filesHeldAsReplicas;
         try {
             ResponseEntity<List<Map<String, String>>> responseEntity = restTemplate.exchange(
-                    listReplicasUrl,
-                    HttpMethod.GET,
-                    null,
-                    new ParameterizedTypeReference<List<Map<String, String>>>() {});
+                    listHeldReplicasUrl, HttpMethod.GET, null, new ParameterizedTypeReference<>() {});
             filesHeldAsReplicas = responseEntity.getBody();
-            System.out.println("Node '" + nodeName + "': Found " + (filesHeldAsReplicas != null ? filesHeldAsReplicas.size() : 0) + " files held as replicas on this node.");
+            if (filesHeldAsReplicas != null) {
+                System.out.println("Node '" + nodeName + "': Found " + filesHeldAsReplicas.size() + " files held as replicas on this node.");
+            } else {
+                System.out.println("Node '" + nodeName + "': No files listed as held replicas by Naming Server.");
+                filesHeldAsReplicas = List.of(); // Empty list
+            }
+        } catch (HttpClientErrorException.NotFound e) {
+            System.out.println("Node '" + nodeName + "': Naming Server endpoint not found or no replicas listed for this node at " + listHeldReplicasUrl);
+            filesHeldAsReplicas = List.of();
+        }
+        catch (Exception e) {
+            System.err.println("Node '" + nodeName + "': Error fetching list of files held as replicas from Naming Server (" + listHeldReplicasUrl + "): " + e.getMessage());
+            return;
+        }
 
+        if (filesHeldAsReplicas.isEmpty()) {
+            System.out.println("Node '" + nodeName + "': No files held as replicas to transfer.");
+            return;
+        }
+
+        // 2. Get this node's PREVIOUS node's IP and File Receiver Port from Naming Server.
+        //    Endpoint example: GET /api/nodes/ip/{thisNodesIp}/previous-node-contact
+        String previousNodeIp = null;
+        int previousNodeFilePort = DEFAULT_TARGET_FILE_RECEIVER_PORT; // Default, ideally from NS
+
+        try {
+            String prevNodeQueryUrl = namingServerUrl + "/api/nodes/ip/" + ipAddress + "/previous-node-contact"; // NEW Endpoint needed on NS
+            Map<String, String> prevNodeInfo = restTemplate.getForObject(prevNodeQueryUrl, Map.class);
+            if (prevNodeInfo != null && prevNodeInfo.containsKey("ip")) {
+                previousNodeIp = prevNodeInfo.get("ip");
+                previousNodeFilePort = Integer.parseInt(prevNodeInfo.getOrDefault("filePort", String.valueOf(DEFAULT_TARGET_FILE_RECEIVER_PORT)));
+                System.out.println("Node '" + nodeName + "': Previous node for transfers identified as: " + previousNodeIp + ":" + previousNodeFilePort);
+            } else {
+                System.err.println("Node '" + nodeName + "': Could not determine previous node from Naming Server via " + prevNodeQueryUrl + ". Cannot transfer replicated files.");
+                return;
+            }
+        } catch (HttpClientErrorException.NotFound e) {
+            System.err.println("Node '" + nodeName + "': Previous node endpoint not found or no previous node for this node. Cannot transfer replicated files.");
+            return;
         } catch (Exception e) {
-            System.err.println("Node '" + nodeName + "': Error fetching list of files held as replicas from Naming Server (" + listReplicasUrl + "): " + e.getMessage());
-            // If we can't get this list, we can't notify properly.
-            // The Naming Server's failure detection will eventually remove the node anyway.
+            System.err.println("Node '" + nodeName + "': Error fetching previous node details from Naming Server: " + e.getMessage());
             return;
         }
 
-        if (filesHeldAsReplicas == null || filesHeldAsReplicas.isEmpty()) {
-            System.out.println("Node '" + nodeName + "': No files found to be held as replicas on this node. No specific file notifications needed for shutdown.");
+        if (previousNodeIp.equals(this.ipAddress)) {
+            System.out.println("Node '" + nodeName + "': Previous node is self. This implies only one node or an issue. No files to transfer.");
             return;
         }
 
-        // 2. For each file, tell the Naming Server that this replica location is going away.
+        // 3. For each file this node was replicating, transfer it to the previousNodeIp.
         for (Map<String, String> fileInfo : filesHeldAsReplicas) {
             String fileName = fileInfo.get("fileName");
-            if (fileName == null || fileName.isEmpty()) {
-                System.err.println("Node '" + nodeName + "': Found a replica entry with no fileName. Skipping.");
-                continue;
-            }
+            // String originalOwnerIp = fileInfo.get("originalOwnerIp"); // Good to have for context
 
-            // This is the same call as in handleFileDeletion.
-            // The Naming Server should understand that if it receives this,
-            // and knows the node is shutting down (via the later DELETE /api/nodes/{hash}),
-            // it needs to ensure data persistence, possibly by triggering re-replication
-            // from the file's actual owner to a new replica node.
-            try {
-                String deleteReplicaUrl = namingServerUrl + "/api/files/" + fileName + "/replicas/" + ipAddress;
-                restTemplate.delete(deleteReplicaUrl);
-                System.out.println("Node '" + nodeName + "': Notified Naming Server that replica for '" + fileName + "' (at " + ipAddress + ") is going away.");
-            } catch (Exception e) {
-                System.err.println("Node '" + nodeName + "': Error notifying Naming Server about replica '" + fileName + "' during shutdown: " + e.getMessage());
+            if (fileName == null || fileName.isEmpty()) continue;
+
+            Path filePath = Paths.get(storageDirectory, fileName);
+            if (Files.exists(filePath) && Files.isRegularFile(filePath)) {
+                try {
+                    System.out.println("Node '" + nodeName + "': Transferring its replica of '" + fileName + "' to previous node: " + previousNodeIp + ":" + previousNodeFilePort);
+                    byte[] fileData = Files.readAllBytes(filePath);
+
+                    FileReplicator.transferFile(ipAddress, previousNodeIp, fileName, fileData);
+
+                    // 4. Update Naming Server: The 'previousNodeIp' now holds the replica that this node (ipAddress) used to hold.
+                    //    The original owner remains the same. We are just moving the replica location.
+                    //    And the previous node "becomes the owner OF THIS REPLICA" (takes responsibility for it).
+                    Map<String, String> replicaMovePayload = Map.of(
+                            "fileName", fileName,
+                            "newReplicaHolderIp", previousNodeIp,    // Previous node now has this replica
+                            "oldReplicaHolderIp", ipAddress          // This node no longer has it
+                            // "originalOwnerIp", originalOwnerIp   // Could be useful for NS to update its fileLog
+                    );
+                    String updateReplicaLocationUrl = namingServerUrl + "/api/files/replicas/move"; // NEW Endpoint needed on NS
+                    restTemplate.postForObject(updateReplicaLocationUrl, replicaMovePayload, Void.class);
+                    System.out.println("Node '" + nodeName + "': Transferred replica '" + fileName + "' to " + previousNodeIp + " and notified Naming Server of replica location change.");
+
+                } catch (IOException e) {
+                    System.err.println("Node '" + nodeName + "': IOException during shutdown transfer of replica '" + fileName + "' to " + previousNodeIp + ": " + e.getMessage());
+                } catch (Exception e) {
+                    System.err.println("Node '" + nodeName + "': Error during shutdown transfer of replica '" + fileName + "' or updating Naming Server: " + e.getMessage());
+                    e.printStackTrace();
+                }
+            } else {
+                System.err.println("Node '" + nodeName + "': File '" + fileName + "' listed as a held replica, but not found in local storage (" + filePath.toAbsolutePath() + ") during shutdown. Skipping transfer.");
             }
         }
-        System.out.println("Node '" + nodeName + "': Finished notifying Naming Server about its replicas during shutdown.");
+        System.out.println("Node '" + nodeName + "': Finished attempting to transfer its held replicas on shutdown.");
     }
 }

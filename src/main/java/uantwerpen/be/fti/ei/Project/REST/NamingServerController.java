@@ -9,6 +9,7 @@ import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -95,15 +96,53 @@ public class NamingServerController {
         return ResponseEntity.ok(replicas);
     }
 
+    @GetMapping("/nodes/ip/{shuttingDownNodeIp}/held-replicas")
+    public ResponseEntity<List<Map<String, String>>> getFilesHeldAsReplicas(
+            @PathVariable String shuttingDownNodeIp) {
+        List<Map<String, String>> heldReplicas = namingServer.getFilesHeldAsReplicasByNode(shuttingDownNodeIp);
+        if (heldReplicas == null) { // NamingServer service might return null if nodeIp not found
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(heldReplicas);
+    }
+
+    @GetMapping("/nodes/ip/{currentNodeIp}/previous-node-contact")
+    public ResponseEntity<Map<String, String>> getPreviousNodeContactDetails(
+            @PathVariable String currentNodeIp) {
+        Map<String, String> contactInfo = namingServer.getPreviousNodeContact(currentNodeIp);
+        if (contactInfo == null || !contactInfo.containsKey("ip")) {
+            return ResponseEntity.notFound().build(); // No previous node or info incomplete
+        }
+        return ResponseEntity.ok(contactInfo);
+    }
+
+    @PostMapping("/files/replicas/move")
+    public ResponseEntity<Void> updateMovedReplicaLocation(@RequestBody Map<String, String> payload) {
+        String fileName = payload.get("fileName");
+        String newReplicaHolderIp = payload.get("newReplicaHolderIp"); // The previous node that received the file
+        String oldReplicaHolderIp = payload.get("oldReplicaHolderIp"); // The shutting down node
+
+        if (fileName == null || newReplicaHolderIp == null || oldReplicaHolderIp == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        namingServer.moveReplicaLocation(fileName, newReplicaHolderIp, oldReplicaHolderIp);
+        return ResponseEntity.ok().build();
+    }
+
+    // Your existing /nodes/{hash}/shouldReplicate - seems fine for querying
     @GetMapping("/nodes/{hash}/shouldReplicate")
     public ResponseEntity<?> shouldReplicate(@PathVariable int hash,
                                              @RequestParam String file) {
         int fileHash = HashingUtil.generateHash(file);
-        String target = namingServer.getNodeForReplication(fileHash);
-        return ResponseEntity.ok(Map.of(
-                "file", file,
-                "fileHash", fileHash,
-                "targetNode", target
-        ));
+        // Assuming getNodeForReplication now returns a map with IP and filePort
+        String targetInfo = namingServer.getNodeForReplication(fileHash);
+        if (targetInfo != null) {
+            return ResponseEntity.ok(Map.of(
+                    "file", file,
+                    "fileHash", fileHash,
+                    "targetNodeIp", targetInfo
+            ));
+        }
+        return ResponseEntity.notFound().build(); // Or appropriate response if no target
     }
 }
