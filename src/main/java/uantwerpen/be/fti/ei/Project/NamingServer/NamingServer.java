@@ -113,6 +113,12 @@ public class NamingServer {
             log.removeDownloadLocation(ip);
         }
         JsonService.saveFileLogs(fileLogs);
+
+        System.out.println("File logs updated after shutdown of " + ip + ":");
+        fileLogs.forEach((file, log) -> {
+            System.out.println("  - " + file + " → owner: " + log.getOwner() + ", downloads: " + log.getDownloadLocations());
+        });
+
         System.out.println("Node removed: " + hash);
         return true;
     }
