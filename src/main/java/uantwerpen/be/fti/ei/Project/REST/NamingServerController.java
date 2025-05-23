@@ -9,6 +9,7 @@ import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 
+import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
 
@@ -145,4 +146,41 @@ public class NamingServerController {
         }
         return ResponseEntity.notFound().build(); // Or appropriate response if no target
     }
+
+    @GetMapping("/nodes/{hash}/files")
+    public ResponseEntity<?> listFiles(@PathVariable int hash) {
+        return ResponseEntity.ok(namingServer.getFilesOfNode(hash));
+    }
+
+    @GetMapping("/gui/nodes")
+    public List<Map<String,Object>> guiNodes() {
+        return namingServer.getNodeMap().values().stream()
+                .map(n -> Map.<String,Object>of(      //  ← let op   <String,Object>
+                        "name", n.getNodeName(),
+                        "hash", n.getCurrentID(),
+                        "ip",   n.getIpAddress(),
+                        "prev", n.getPreviousID(),
+                        "next", n.getNextID()))
+                .toList();
+    }
+
+    @GetMapping("/gui/files/{hash}")       // local+replica lijst (Files tab)
+    public Map<String,List<String>> guiFiles(@PathVariable int hash) {
+        return namingServer.getFilesOfNode(hash);
+    }
+
+    /**
+     * Geeft het IP-adres van deze naming-server terug aan de GUI.
+     */
+    @GetMapping("/get-IP-server")
+    public ResponseEntity<Map<String,String>> getNamingServerIp() {
+        String ip;
+        try {
+            ip = InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            ip = "127.0.0.1";
+        }
+        return ResponseEntity.ok(Map.of("ip", ip));
+    }
+
 }

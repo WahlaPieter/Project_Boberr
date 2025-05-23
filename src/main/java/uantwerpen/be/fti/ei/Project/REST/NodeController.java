@@ -77,4 +77,15 @@ public class NodeController {
                 "nextID",     node.getNextID()
         );
     }
+
+    @GetMapping("/gui/state")              // één node (Home-details popup)
+    public Map<String,Object> guiState() {
+        return Map.of(
+                "name",  node.getNodeName(),
+                "hash",  node.getCurrentID(),
+                "ip",    node.getIpAddress(),
+                "prev",  node.getPreviousID(),
+                "next",  node.getNextID()
+        );
+    }
 }

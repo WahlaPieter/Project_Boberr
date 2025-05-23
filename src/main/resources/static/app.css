@@ -1,0 +1,55 @@
+:root{
+    --bg:#fafafa;--fg:#1f2937;--accent:#2563eb;
+    --card:#ffffff;--card-border:#e5e7eb;
+}
+body{margin:0;font-family:system-ui;background:var(--bg);color:var(--fg);}
+
+/* ─── sidebar ───────────────────────────── */
+.sidebar{
+    position:fixed;inset:0 auto 0 0;width:180px;
+    background:#111827;color:#f9fafb;padding:1rem 0;
+    display:flex;flex-direction:column;align-items:center;gap:.5rem;
+}
+.sidebar h2{margin:0;font-size:1.1rem;}
+.sidebar .tab{
+    all:unset;cursor:pointer;color:#f9fafb;font-size:.9rem;
+    padding:.4rem .8rem;border-radius:4px;margin-top:.3rem;
+}
+.sidebar .tab.active{background:var(--accent);}
+
+/* ─── layout ─────────────────────────────── */
+main{margin-left:190px;padding:1.2rem 1.6rem;}
+.pane{display:none;} .pane.visible{display:block;}
+
+h1{margin-top:0;font-size:1.4rem}
+.card{
+    background:var(--card);border:1px solid var(--card-border);
+    border-radius:6px;padding:1rem;margin-bottom:1rem;
+}
+.card-head{display:flex;align-items:center;gap:.5rem;margin-bottom:.6rem;}
+.card-head button{cursor:pointer;border:none;background:#d1d5db;border-radius:4px;padding:.2rem .6rem;}
+
+table{width:100%;border-collapse:collapse;font-size:.88rem;}
+th,td{border-bottom:1px solid #e5e7eb;padding:.3rem .4rem;text-align:left;}
+tr:hover{background:#f3f4f6;cursor:pointer;}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:1rem;}
+
+/* ─── modal ─────────────────────────────── */
+.modal{
+    position:fixed;inset:0;background:#0007;display:flex;
+    align-items:center;justify-content:center;z-index:999;
+}
+.modal-box{background:var(--card);padding:1.2rem 1.6rem;border-radius:8px;
+    min-width:220px;text-align:center;}
+.modal .actions{margin-top:1rem;display:flex;gap:.6rem;justify-content:center;}
+.modal button{cursor:pointer;padding:.3rem .9rem;border:none;
+    background:var(--accent);color:#fff;border-radius:4px;}
+
+/* ─── écht verberg elementen met .hidden ───────────── */
+.hidden{display:none !important;}
+
+/* ─── dark mode ─────────────────────────── */
+.dark{
+    --bg:#1f2937;--fg:#f3f4f6;--card:#374151;--card-border:#4b5563;
+}
