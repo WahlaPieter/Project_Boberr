@@ -74,11 +74,25 @@ public class NamingServer {
         int nextKey = doomed.getNextID();
         Node prev = nodeMap.get(prevKey);
         Node next = nodeMap.get(nextKey);
-
+        String ip = doomed.getIpAddress();
         // update pointers
         if (prev != null) prev.setNextID(nextKey);
         if (next != null) next.setPreviousID(prevKey);
         nodeMap.remove(hash);
+
+        List<Map<String, String>> replicaFiles = getFilesHeldAsReplicasByNode(ip);
+
+        for (Map<String, String> fileInfo : replicaFiles) {
+            String fileName = fileInfo.get("fileName");
+            String originalOwnerIp = fileInfo.get("originalOwnerIp");
+
+            String newReplicaTargetIp = getPreviousValidReplicaHolder(originalOwnerIp, ip);
+            if (newReplicaTargetIp != null) {
+                moveReplicaLocation(fileName, newReplicaTargetIp, ip);
+            } else {
+                System.err.println(" Geen geldige nieuwe replica-locatie gevonden voor " + fileName);
+            }
+        }
 
         // let neighbours know
         RestTemplate rt = new RestTemplate();
@@ -96,11 +110,11 @@ public class NamingServer {
                         Void.class);
             }
         } catch (Exception e) {
-            System.err.println("⚠️  neighbour-update failed: " + e.getMessage());
+            System.err.println(" neighbour-update failed: " + e.getMessage());
         }
 
 
-        String ip = doomed.getIpAddress();
+
         storedFiles.remove(ip);
         saveNodeMap();
         redistributeFiles();
@@ -674,6 +688,20 @@ public class NamingServer {
             }
         });
         return Map.of("local", local, "replicas", replicas);
+    }
+
+    private String getPreviousValidReplicaHolder(String originalOwnerIp, String excludedIp) {
+        Node ownerNode = getNodeByIp(originalOwnerIp);
+        if (ownerNode == null) return null;
+
+        int attempts = 0;
+        Node candidate = nodeMap.get(ownerNode.getPreviousID());
+        while ((candidate == null || candidate.getIpAddress().equals(excludedIp)) && attempts < nodeMap.size()) {
+            candidate = nodeMap.get(candidate.getPreviousID());
+            attempts++;
+        }
+
+        return candidate != null ? candidate.getIpAddress() : null;
     }
 
 }
