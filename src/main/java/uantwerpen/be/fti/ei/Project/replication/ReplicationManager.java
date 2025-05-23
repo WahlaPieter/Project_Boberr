@@ -82,9 +82,9 @@ public class ReplicationManager {
             // (e.g., replicate to the node *previous* to the owner, or to N-1 other nodes).
             // The current implementation of your NamingServer.getNodeForReplication seems to aim for this.
             String replicationQueryUrl = namingServerUrl + "/api/replicate?hash=" + fileHash;
-            Map<String, String> response;
+            Map<String, Object> targetDetails;
             try {
-                response = restTemplate.getForObject(replicationQueryUrl, Map.class);
+                targetDetails = restTemplate.getForObject(replicationQueryUrl, Map.class);
             } catch (HttpClientErrorException.NotFound e) {
                 System.out.println("Node '" + nodeName + "': No replication target found by Naming Server for file: " + fileName + ". This node might be the sole responsible node or alone.");
                 return;
@@ -93,12 +93,12 @@ public class ReplicationManager {
                 return;
             }
 
-            if (response == null || !response.containsKey("ip")) {
+            if (targetDetails == null || !targetDetails.containsKey("ip")) {
                 System.out.println("Node '" + nodeName + "': Naming Server returned no valid replication target IP for file: " + fileName);
                 return;
             }
 
-            String targetNodeIpForReplica = response.get("ip");
+            String targetNodeIpForReplica = (String) targetDetails.get("ip");
 
             if (targetNodeIpForReplica.equals(ipAddress)) {
                 System.out.println("Node '" + nodeName + "': Skipping replication of '" + fileName + "' - Naming Server indicated target for replica is self (" + targetNodeIpForReplica + ").");

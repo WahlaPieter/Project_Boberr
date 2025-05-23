@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.*;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
+import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 
 import java.net.InetAddress;
 import java.util.List;
@@ -70,8 +71,8 @@ public class NamingServerController {
 
     @GetMapping("/replicate")
     public ResponseEntity<?> getReplicationTarget(@RequestParam int hash) {
-        String ip = namingServer.getNodeForReplication(hash);
-        return ip != null ? ResponseEntity.ok(Map.of("ip", ip)) : ResponseEntity.notFound().build();
+        Map<String, Object> targetInfo = namingServer.getNodeForReplication(hash);
+        return targetInfo.get("ip") != null ? ResponseEntity.ok(Map.of("ip", targetInfo.get("ip"))) : ResponseEntity.notFound().build();
     }
 
     @PostMapping("/files/replicate")
@@ -136,7 +137,7 @@ public class NamingServerController {
                                              @RequestParam String file) {
         int fileHash = HashingUtil.generateHash(file);
         // Assuming getNodeForReplication now returns a map with IP and filePort
-        String targetInfo = namingServer.getNodeForReplication(fileHash);
+        Map<String, Object> targetInfo = namingServer.getNodeForReplication(fileHash);
         if (targetInfo != null) {
             return ResponseEntity.ok(Map.of(
                     "file", file,
@@ -145,6 +146,15 @@ public class NamingServerController {
             ));
         }
         return ResponseEntity.notFound().build(); // Or appropriate response if no target
+    }
+
+    @GetMapping("/filelogs")
+    public ResponseEntity<Map<String, FileLogEntry>> getFileLogs() {
+        Map<String, FileLogEntry> logs = namingServer.getFileLogs(); // Assuming NamingServer has this getter
+        if (logs == null || logs.isEmpty()) {
+            return ResponseEntity.noContent().build(); // Or OK with empty map
+        }
+        return ResponseEntity.ok(logs);
     }
 
     @GetMapping("/nodes/{hash}/files")

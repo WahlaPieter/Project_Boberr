@@ -61,6 +61,7 @@ public class NamingServer {
         storedFiles.putIfAbsent(ipAddress, new HashSet<>());
         redistributeFiles();
         saveFileMap();
+        initiateRedistributionOrReplicationDueToNewNode(n);
         System.out.println("Node added: " + nodeName + " -> " + ipAddress);
         return true;
     }
@@ -225,6 +226,66 @@ public class NamingServer {
         saveFileMap();
     }
 
+    private synchronized void initiateRedistributionOrReplicationDueToNewNode(Node newNodeJustAdded) {
+        System.out.println("NamingServer: Re-evaluating file ownership and replication due to new node " + newNodeJustAdded.getIpAddress());
+
+        // First, ensure primary ownerships are correct (your existing redistributeFiles should handle this part)
+        redistributeFiles(); // This moves files to their new *primary* owner if necessary.
+
+        // After primary ownership is settled, now check for creating/updating replicas.
+        // For every file that is currently "owned", see if it needs to be replicated to its designated replica node.
+        for (String fileName : new HashSet<>(fileLogs.keySet())) { // Iterate over a copy of known files
+            FileLogEntry log = fileLogs.get(fileName);
+            if (log == null || log.getOwner() == null || log.getOwner().isEmpty()) {
+                System.out.println("NamingServer: Skipping file '" + fileName + "' for re-replication check (no owner in log).");
+                continue;
+            }
+
+            String currentOwnerIp = log.getOwner();
+            Node currentOwnerNode = getNodeByIp(currentOwnerIp); // Assumes Node object has httpPort
+
+            if (currentOwnerNode == null) {
+                System.err.println("NamingServer: Owner node " + currentOwnerIp + " for file '" + fileName + "' not found in map. Cannot instruct replication.");
+                continue;
+            }
+
+            int fileHash = HashingUtil.generateHash(fileName);
+            // Ask where a replica of this file should go NOW, with the new node in the ring.
+            Map<String, Object> replicaTargetInfo = getNodeForReplication(fileHash);
+
+            if (replicaTargetInfo != null && replicaTargetInfo.containsKey("ip")) {
+                String designatedReplicaIp = (String) replicaTargetInfo.get("ip");
+                // int designatedReplicaFilePort = ((Number) replicaTargetInfo.get("filePort")).intValue(); // We won't pass this
+
+                // If the designated replica location is NOT the owner itself,
+                // AND this replica doesn't already exist at that location according to our logs:
+                if (!designatedReplicaIp.equals(currentOwnerIp) && !log.getDownloadLocations().contains(designatedReplicaIp)) {
+                    System.out.println("NamingServer: File '" + fileName + "' (owner: " + currentOwnerIp +
+                            ") needs new/updated replica at " + designatedReplicaIp +
+                            ". Instructing owner to re-evaluate replication for this file.");
+                    try {
+                        // Instruct currentOwnerNode to re-run its replication logic for this specific file.
+                        // The owner node, when it runs its replicateSingleFileOrUpdate, will again ask the NS
+                        // where to send it, and the NS should now give the correct new target.
+                        String triggerReplicationUrl = "http://" + currentOwnerIp + ":8081/api/bootstrap/files/ensure-replication"; // NEW ENDPOINT on Node
+                        Map<String, String> payload = Map.of("fileName", fileName);
+                        restTemplate.postForObject(triggerReplicationUrl, payload, String.class);
+                    } catch (Exception e) {
+                        System.err.println("NamingServer: Failed to instruct owner " + currentOwnerIp +
+                                " to ensure replication for " + fileName + " to " + designatedReplicaIp +
+                                ": " + e.getMessage());
+                    }
+                } else if (designatedReplicaIp.equals(currentOwnerIp)) {
+                    System.out.println("NamingServer: For file '" + fileName + "', owner " + currentOwnerIp + " is also the designated replica target (e.g. only 2 nodes). No further action needed from NS.");
+                } else if (log.getDownloadLocations().contains(designatedReplicaIp)) {
+                    System.out.println("NamingServer: For file '" + fileName + "', replica already exists at designated target " + designatedReplicaIp + ".");
+                }
+            } else {
+                System.out.println("NamingServer: For file '" + fileName + "' (owner: " + currentOwnerIp + "), no distinct replica target found after new node addition.");
+            }
+        }
+    }
+
     public synchronized void handleNodeFailure(int failedHash, String failedIp) {
         if (!nodeMap.containsKey(failedHash)) return;
         Map.Entry<Integer, Node> prev = nodeMap.lowerEntry(failedHash);
@@ -277,33 +338,49 @@ public class NamingServer {
     public void saveNodeMap() { JsonService.saveToJson(nodeMap); }
     public void saveFileMap() { JsonService.saveStoredFiles(storedFiles); }
 
-    public synchronized String getNodeForReplication(int hash) {
-        if (nodeMap.isEmpty() || nodeMap.size() == 1) {
-            System.out.println("nodeMap is empty");
+    // In NamingServer.java
+    public synchronized Map<String, Object> getNodeForReplication(int fileHash) { // Renamed and to return port
+        if (nodeMap.isEmpty()) {
+            System.out.println("NamingServer.getNodeAndPortForReplication: Node map is empty.");
             return null;
         }
 
-        // find owner of the file
-        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingKey(hash) != null
-                ? nodeMap.ceilingEntry(hash)
-                : nodeMap.firstEntry();
+        // Determine the node primarily responsible for this fileHash (the "owner")
+        Map.Entry<Integer, Node> ownerEntry = nodeMap.ceilingEntry(fileHash);
+        if (ownerEntry == null) {
+            ownerEntry = nodeMap.firstEntry();
+        }
+        Node ownerNode = ownerEntry.getValue();
+        System.out.println("NamingServer.getNodeAndPortForReplication: For file hash " + fileHash + ", determined owner is " + ownerNode.getIpAddress() + " (ID: " + ownerNode.getCurrentID() + ")");
 
-        Node owner = ownerEntry.getValue();
-        Node replica = nodeMap.get(owner.getNextID());
+        if (nodeMap.size() == 1) {
+            System.out.println("NamingServer.getNodeAndPortForReplication: Only one node in system (" + ownerNode.getIpAddress() + "). Target for replica is self (no external replication).");
+            Map<String, Object> selfTarget = new HashMap<>();
+            selfTarget.put("ip", ownerNode.getIpAddress());
+            return selfTarget; // Requesting node should check if target IP is its own
+        }
 
-        // try new node for replication
+        // If more than one node, replicate to the owner's NEXT distinct node
+        Node replicaTargetNode = nodeMap.get(ownerNode.getNextID());
         int attempts = 0;
-        while (replica.getIpAddress().equals(owner.getIpAddress())) {
-            replica = nodeMap.get(replica.getNextID());
+        while (replicaTargetNode == null || replicaTargetNode.getIpAddress().equals(ownerNode.getIpAddress())) {
+            if (replicaTargetNode == null) { // Should not happen if pointers are correct
+                System.err.println("NamingServer.getNodeAndPortForReplication: Owner " + ownerNode.getIpAddress() + "'s nextID (" + ownerNode.getNextID() + ") does not exist in map! Map: " + nodeMap.keySet());
+                return null; // Critical error in ring consistency
+            }
+            System.out.println("NamingServer.getNodeAndPortForReplication: Initial replica target " + replicaTargetNode.getIpAddress() + " is same as owner " + ownerNode.getIpAddress() + ". Finding next distinct.");
+            replicaTargetNode = nodeMap.get(replicaTargetNode.getNextID()); // Try next's next
             attempts++;
-
-            if (attempts >= nodeMap.size()) {
-                System.out.println("No fitting replica: everyone is owner");
+            if (attempts >= nodeMap.size()) { // Prevent infinite loop
+                System.err.println("NamingServer.getNodeAndPortForReplication: Could not find a distinct replica target for file hash " + fileHash + " (owner: " + ownerNode.getIpAddress() + "). All nodes might be the owner or ring is broken.");
                 return null;
             }
         }
 
-        return replica.getIpAddress();
+        System.out.println("NamingServer.getNodeAndPortForReplication: For file hash " + fileHash + " (owner: " + ownerNode.getIpAddress() + "), replication target is " + replicaTargetNode.getIpAddress() + " (ID: " + replicaTargetNode.getCurrentID() + ")");
+        Map<String, Object> targetInfo = new HashMap<>();
+        targetInfo.put("ip", replicaTargetNode.getIpAddress());
+        return targetInfo;
     }
 
     public synchronized void registerFileReplication(String fileName, String ownerIp, String replicaIp) {
@@ -560,6 +637,25 @@ public class NamingServer {
         }
 
         return null;
+    }
+
+    public Map<String,List<String>> getFilesOfNode(int hash) {
+        Node n = nodeMap.get(hash);
+        if (n == null) return Map.of("local", List.of(), "replicas", List.of());
+
+        String ip = n.getIpAddress();
+
+        List<String> local    = new ArrayList<>(storedFiles.getOrDefault(ip, Set.of()));
+        List<String> replicas = new ArrayList<>();
+
+        storedFiles.forEach((ownerIp, set) -> {
+            if (!ownerIp.equals(ip)) {
+                set.stream()
+                        .filter(f -> storedFiles.getOrDefault(ip, Set.of()).contains(f))
+                        .forEach(replicas::add);
+            }
+        });
+        return Map.of("local", local, "replicas", replicas);
     }
 
 }

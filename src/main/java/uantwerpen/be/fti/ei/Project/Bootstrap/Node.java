@@ -252,4 +252,12 @@ public class Node {
     public String getNodeName() {
         return nodeName;
     }
+
+    public ReplicationManager getReplicationManager() {
+        return replicationManager;
+    }
+
+    public String getStoragePath() {
+        return storagePath;
+    }
 }

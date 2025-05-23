@@ -8,11 +8,13 @@ import org.springframework.web.bind.annotation.*;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.replication.FileTransferRequest;
+import uantwerpen.be.fti.ei.Project.replication.ReplicationManager;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 
@@ -49,6 +51,39 @@ public class NodeController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to delete local file " + fileNameToDelete);
         }
     }
+
+    @PostMapping("/files/ensure-replication")
+    public ResponseEntity<String> handleEnsureReplicationInstruction(@RequestBody Map<String, String> payload) {
+        String fileName = payload.get("fileName");
+        if (fileName == null || fileName.isEmpty()) {
+            return ResponseEntity.badRequest().body("fileName missing for ensure-replication instruction.");
+        }
+
+        System.out.println("Node '" + node.getNodeName() +
+                "': Received instruction from NS to ensure replication for its owned file: " + fileName);
+
+        ReplicationManager rm = node.getReplicationManager();
+        if (rm != null) {
+            // The ReplicationManager's existing handleFileAdditionOrModification (or replicateSingleFileOrUpdate)
+            // can be used here. It will query the NS for the target and send if necessary.
+            // This assumes the file exists locally on this "owner" node.
+            Path filePath = Paths.get(node.getStoragePath(), fileName); // Get node's storage path
+            if (Files.exists(filePath)) {
+                // We are essentially re-triggering the logic that FileWatcher would use
+                // for a modification, but initiated by the Naming Server.
+                rm.handleFileAdditionOrModification(fileName); // This will re-query NS for target
+                return ResponseEntity.ok("Replication check initiated for '" + fileName + "'.");
+            } else {
+                System.err.println("Node '" + node.getNodeName() +
+                        "': Instructed to ensure replication for '" + fileName + "', but file not found locally.");
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("File '" + fileName + "' not found locally to replicate.");
+            }
+        } else {
+            System.err.println("Node '" + node.getNodeName() + "': ReplicationManager is null. Cannot process ensure-replication instruction.");
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("ReplicationManager not available.");
+        }
+    }
+
 
     @PostMapping("/files/receive")
     public ResponseEntity<?> receiveFile(@RequestBody FileTransferRequest request) {
