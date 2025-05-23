@@ -4,14 +4,15 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import uantwerpen.be.fti.ei.Project.Agents.AgentUtils;
-import uantwerpen.be.fti.ei.Project.Agents.LockRequest;
-import uantwerpen.be.fti.ei.Project.Agents.SyncAgent;
+import uantwerpen.be.fti.ei.Project.Agents.*;
 import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.replication.FileTransferRequest;
-import uantwerpen.be.fti.ei.Project.Agents.FileEntry;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpEntity;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -69,26 +70,31 @@ public class NodeController {
      * REST-endpoint dat een lijst teruggeeft van alle bestanden
      * die lokaal op deze node aanwezig zijn.
      *
-     * Deze lijst wordt automatisch opgebouwd op basis van fysieke .txt-bestanden
-     * in de opslagmap van de node, en gebruikt door SyncAgents voor synchronisatie.
+     * Deze lijst wordt opgebouwd vanuit de 'nodes_storage/<ip>' folder.
+     * Alleen nieuwe bestanden worden toegevoegd — bestaande blijven met lockstatus behouden.
      *
-     * @return Map van bestandsnamen naar FileEntry-objecten (JSON)
+     * @return JSON: Map<String, FileEntry>
      */
     @GetMapping("/agent/filelist")
     public ResponseEntity<Map<String, FileEntry>> getFileList() {
-        String nodeIp = node.getIpAddress(); // Verkrijg IP van deze node
-        String path = "nodes_storage/" + nodeIp; // Correct pad naar opslag
-
-        Map<String, FileEntry> scannedList = AgentUtils.scanLocalFiles(path, nodeIp);
-        return ResponseEntity.ok(scannedList);
+        node.updateFileListFromDisk();
+        return ResponseEntity.ok(node.getLocalFileList());
     }
 
+    /**
+     * Ontvangt een lock-aanvraag van een andere node.
+     * Als het bestand nog niet gelockt is → zet lock.
+     *
+     * @param request JSON met 'filename' en 'requesterIp'
+     * @return HTTP 200 OK bij succes, 409 als al gelockt, 404 als niet gevonden
+     */
     @PostMapping("/agent/lock")
     public ResponseEntity<String> lockFile(@RequestBody LockRequest request) {
         String filename = request.getFilename();
 
-        // Scan lokale bestanden
-        Map<String, FileEntry> fileList = AgentUtils.scanLocalFiles("nodes_storage/" + node.getIpAddress(), node.getIpAddress());
+        node.updateFileListFromDisk(); // Werk file list bij met eventuele nieuwe bestanden
+
+        Map<String, FileEntry> fileList = node.getLocalFileList();
 
         if (fileList.containsKey(filename)) {
             FileEntry entry = fileList.get(filename);
@@ -103,5 +109,46 @@ public class NodeController {
 
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Bestand niet gevonden");
     }
+
+    /**
+     * Ontvangt een FailAgent, voert deze uit in een thread,
+     * wacht tot het klaar is, en stuurt de agent daarna door naar de volgende node.
+     */
+    @PostMapping("/agent/failure")
+    public ResponseEntity<String> receiveFailureAgent(@RequestBody FailAgent agent) {
+        try {
+            System.out.println("[FailAgent] Ontvangen op node: " + node.getNodeName());
+
+            // 1. Start de agent in een aparte thread
+            Thread t = new Thread(agent);
+            t.start();
+            t.join(); // wacht tot de agent klaar is met run()
+
+            // 2. Check of agent moet stoppen (gebeurt binnen run() zelf)
+
+            // 3. Als agent nog leeft → stuur naar volgende node
+            if (node.getCurrentID() != agent.getOriginNodeId()) {
+                String nextIp = node.getIpFromNodeId(node.getNextID());
+                String nextUrl = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
+
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+
+                HttpEntity<FailAgent> request = new HttpEntity<>(agent, headers);
+                RestTemplate rest = new RestTemplate();
+                rest.postForEntity(nextUrl, request, String.class);
+
+                System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
+            }
+
+            return ResponseEntity.ok("FailAgent uitgevoerd");
+
+        } catch (Exception e) {
+            System.err.println("[FailAgent] Fout tijdens verwerking: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Fout");
+        }
+    }
+
+
 
 }

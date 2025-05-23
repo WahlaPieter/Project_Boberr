@@ -9,6 +9,9 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
+import uantwerpen.be.fti.ei.Project.Agents.FailAgent;
+import uantwerpen.be.fti.ei.Project.Agents.FailureMonitor;
+import uantwerpen.be.fti.ei.Project.Agents.FileEntry;
 import uantwerpen.be.fti.ei.Project.Agents.SyncAgent;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastReceiver;
 import uantwerpen.be.fti.ei.Project.Discovery.MulticastSender;
@@ -16,6 +19,10 @@ import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.replication.FileWatcher;
 import uantwerpen.be.fti.ei.Project.replication.ReplicationManager;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.MediaType;
+
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -26,6 +33,8 @@ import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.io.File;
+import java.util.HashMap;
 
 @Component
 @Profile("node")
@@ -44,6 +53,27 @@ public class Node {
 
     @Autowired
     private transient RestTemplate rest;
+
+
+    // Toegevoegd voor synchronisatie
+    private Map<String, FileEntry> localFileList = new HashMap<>();
+
+    public Map<String, FileEntry> getLocalFileList() {
+        return localFileList;
+    }
+
+    public void updateFileListFromDisk() {
+        String path = "nodes_storage/" + ipAddress;
+        File folder = new File(path);
+        File[] files = folder.listFiles((dir, name) -> name.endsWith(".txt"));
+
+        if (files != null) {
+            for (File file : files) {
+                String filename = file.getName().replace(".txt", "");
+                localFileList.putIfAbsent(filename, new FileEntry(filename, false, ipAddress));
+            }
+        }
+    }
 
     /* ------------- config ------------- */
     @Value("${storage.path}")
@@ -131,13 +161,12 @@ public class Node {
             }
         }).start();
 
-        // Start SyncAgent op deze node
+        // Start SyncAgent
         try {
-            // TIJDELIJK: handmatig IP van volgende node invullen
             String nextNodeIp = getIpFromNodeId(nextID);
             String nextNodeUrl = "http://" + nextNodeIp + ":8081";
 
-            SyncAgent syncAgent = new SyncAgent(ipAddress, nextNodeUrl, "nodes_storage/" + ipAddress, rest);
+            SyncAgent syncAgent = new SyncAgent(ipAddress, nextNodeUrl, "nodes_storage/" + ipAddress, rest, namingServerUrl);
             Thread syncThread = new Thread(syncAgent);
             syncThread.setDaemon(true);
             syncThread.start();
@@ -146,6 +175,13 @@ public class Node {
         } catch (Exception e) {
             System.err.println("[Node] Fout bij starten van SyncAgent: " + e.getMessage());
         }
+        // Start de failureagent
+        FailureMonitor monitor = new FailureMonitor(this, rest);
+        Thread failMonitorThread = new Thread(monitor);
+        failMonitorThread.setDaemon(true);
+        failMonitorThread.start();
+        System.out.println("[Node] FailureMonitor gestart om next node te controleren.");
+
     }
 
     @PreDestroy
@@ -213,24 +249,45 @@ public class Node {
         }
     }
     // Voor syncAgent
-    private String getIpFromNodeId(int nodeId) {
+    public String getIpFromNodeId(int nodeId) {
         try {
             String url = namingServerUrl + "/api/nodes/" + nodeId;
             Map<String, Object> response = rest.getForObject(url, Map.class);
             return (String) response.get("ipAddress");
         } catch (Exception e) {
             System.err.println("[Node] Fout bij ophalen van IP voor nodeID " + nodeId + ": " + e.getMessage());
-            return "127.0.0.1"; // fallback
+            return "127.0.0.1";
         }
     }
 
+    public void simulateFailureDetection(int failingNodeId) {
+        try {
+            System.out.println("[TEST] Failure gedetecteerd bij nodeID: " + failingNodeId);
 
+            FailAgent failAgent = new FailAgent(failingNodeId, this.getCurrentID(), this);
+
+            String nextIp = getIpFromNodeId(nextID);
+            String url = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            HttpEntity<FailAgent> request = new HttpEntity<>(failAgent, headers);
+
+            RestTemplate rest = new RestTemplate();
+            rest.postForEntity(url, request, String.class);
+
+            System.out.println("[TEST] FailAgent gestart en verzonden naar: " + nextIp);
+        } catch (Exception e) {
+            System.err.println("[TEST] Fout bij starten van FailAgent: " + e.getMessage());
+        }
+    }
 
     public void updatePrevious(int id) { this.previousID = id; }
     public void updateNext(int id) { this.nextID = id; }
 
     // Getters
     public int getPreviousID() { return previousID; }
+
     public int getNextID() { return nextID; }
 
     public void setCurrentID(int currentID) {
