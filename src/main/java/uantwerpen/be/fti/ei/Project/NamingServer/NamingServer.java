@@ -109,15 +109,12 @@ public class NamingServer {
             String file = entry.getKey();
             FileLogEntry log = entry.getValue();
 
-            // Als de verwijderde node de owner was, wijs nieuwe toe
-            if (log.getOwner().equals(ip)) {
-                String newOwner = getNextValidOwner(file, ip); // helper nodig
+            // Als deze node de owner was, wijs een nieuwe toe
+            if (ip.equals(log.getOwner())) {
+                String newOwner = getNextValidOwner(file, ip);
                 log.setOwner(newOwner);
-                log.addDownloadLocation(newOwner);
-            }
 
-            // Verwijder als downloadLocation
-            log.removeDownloadLocation(ip);
+            }
         }
         JsonService.saveFileLogs(fileLogs);
 
@@ -137,7 +134,9 @@ public class NamingServer {
         try {
             FileStorage.storeFile(ip, fileName, "Content: " + fileName);
             storedFiles.get(ip).add(fileName);
-            fileLogs.putIfAbsent(fileName, new FileLogEntry(ip));
+            if (ip != null) {
+                fileLogs.putIfAbsent(fileName, new FileLogEntry(ip));
+            }
             fileLogs.get(fileName).addDownloadLocation(ip);
             JsonService.saveFileLogs(fileLogs);
             saveFileMap();
@@ -156,10 +155,22 @@ public class NamingServer {
         return ip;
     }
 
-    private String findResponsibleNode(int hash) {
+    private String findResponsibleNode(int fileHash) {
         if (nodeMap.isEmpty()) return null;
-        Integer key = nodeMap.ceilingKey(hash);
-        if (key == null) key = nodeMap.firstKey();
+        // Vind de grootste key die < fileHash
+        Integer key = null;
+        for (Integer nodeHash : nodeMap.descendingKeySet()) {
+            if (nodeHash < fileHash) {
+                key = nodeHash;
+                break;
+            }
+        }
+
+        // Wrap around naar hoogste node als niks kleiner is
+        if (key == null) {
+            key = nodeMap.lastKey();
+        }
+
         return nodeMap.get(key).getIpAddress();
     }
 
@@ -206,10 +217,13 @@ public class NamingServer {
                         storedFiles.get(src).remove(f);
                         storedFiles.computeIfAbsent(dst, k -> new HashSet<>()).add(f);
 
-                        fileLogs.putIfAbsent(f, new FileLogEntry(dst));
-                        fileLogs.get(f).removeDownloadLocation(src);
-                        fileLogs.get(f).setOwner(dst);
-                        fileLogs.get(f).addDownloadLocation(dst);
+                        if (dst != null) {
+                            fileLogs.putIfAbsent(f, new FileLogEntry(dst));
+                            fileLogs.get(f).setOwner(dst);
+                            fileLogs.get(f).addDownloadLocation(src); // originele bron behouden
+                            fileLogs.get(f).addDownloadLocation(dst); // nieuwe replicatie-doel
+
+                        }
                         JsonService.saveFileLogs(fileLogs);
 
                         System.out.println("Files redistributed: " + f + " van " + src + " → " + dst);
@@ -389,8 +403,12 @@ public class NamingServer {
         if (!ownerIp.equals(replicaIp)) {
             storedFiles.computeIfAbsent(replicaIp, k -> new HashSet<>()).add(fileName);
         }
-        fileLogs.putIfAbsent(fileName, new FileLogEntry(ownerIp));
-        fileLogs.get(fileName).addDownloadLocation(replicaIp);
+        if (ownerIp != null) {
+            fileLogs.putIfAbsent(fileName, new FileLogEntry(ownerIp));
+        }
+        if (replicaIp != null) {
+            fileLogs.get(fileName).addDownloadLocation(replicaIp);
+        }
         JsonService.saveFileLogs(fileLogs);
 
         saveFileMap();
