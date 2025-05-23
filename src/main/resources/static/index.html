@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Distributed ring – monitor</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+    <header><h2>Ring GUI</h2></header>
+    <nav>
+        <button data-tab="home"  class="tab active">Home</button>
+        <button data-tab="nodes" class="tab">Nodes</button>
+        <button data-tab="files" class="tab">Files</button>
+        <button data-tab="opts"  class="tab">Options</button>
+    </nav>
+</aside>
+
+<!-- MAIN -->
+<main>
+    <!-- HOME -->
+    <section id="tab-home" class="pane visible">
+        <h1>Overview</h1>
+
+        <div id="ns-block" class="card">
+            <h3>Naming-server</h3>
+            <p>IP <code id="ns-ip">–</code></p>
+            <p>Active nodes <span id="ns-count">0</span></p>
+        </div>
+
+        <div class="card">
+            <header class="card-head">
+                <h3 style="flex:1">Ring nodes</h3>
+                <button id="btn-refresh" title="Refresh">↻</button>
+                <button id="btn-add"     title="Add node">➕</button>
+            </header>
+
+            <table id="tbl-home">
+                <thead>
+                <tr><th>Name</th><th>ID</th><th>IP</th><th>Prev</th><th>Next</th></tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+
+        <div id="detail" class="card hidden"></div>
+    </section>
+
+    <!-- NODES -->
+    <section id="tab-nodes" class="pane">
+        <h1>Nodes</h1>
+        <table id="tbl-nodes">
+            <thead>
+            <tr><th>Name</th><th>ID</th><th>IP</th><th>Status</th><th>⋯</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+    </section>
+
+    <!-- FILES -->
+    <section id="tab-files" class="pane">
+        <h1>Files</h1>
+        <div id="file-grid" class="grid"></div>
+    </section>
+
+    <!-- OPTIONS -->
+    <section id="tab-opts" class="pane">
+        <h1>Options</h1>
+        <label>Theme
+            <select id="sel-theme">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+            </select>
+        </label>
+    </section>
+</main>
+
+<!-- HOST-PICKER MODAL -->
+<div id="host-modal" class="hidden modal">
+    <div class="modal-box">
+        <h3>Select host IP</h3>
+        <select id="sel-host">
+            <option value="172.20.0.4">172.20.0.4</option>
+            <option value="172.20.0.5">172.20.0.5</option>
+            <option value="172.20.0.6">172.20.0.6</option>
+        </select>
+        <div class="actions">
+            <button id="host-ok">OK</button>
+            <button id="host-cancel">Cancel</button>
+        </div>
+    </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

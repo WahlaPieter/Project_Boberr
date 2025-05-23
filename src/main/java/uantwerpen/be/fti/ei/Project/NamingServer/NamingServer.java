@@ -301,4 +301,23 @@ public class NamingServer {
 
         return replicatedFiles;
     }
+
+    public Map<String,List<String>> getFilesOfNode(int hash) {
+        Node n = nodeMap.get(hash);
+        if (n == null) return Map.of("local", List.of(), "replicas", List.of());
+
+        String ip = n.getIpAddress();
+
+        List<String> local    = new ArrayList<>(storedFiles.getOrDefault(ip, Set.of()));
+        List<String> replicas = new ArrayList<>();
+
+        storedFiles.forEach((ownerIp, set) -> {
+            if (!ownerIp.equals(ip)) {
+                set.stream()
+                        .filter(f -> storedFiles.getOrDefault(ip, Set.of()).contains(f))
+                        .forEach(replicas::add);
+            }
+        });
+        return Map.of("local", local, "replicas", replicas);
+    }
 }
