@@ -119,6 +119,25 @@ public class FailAgent implements Runnable, Serializable {
             return;
         }
 
+        // Stap 4: Agent doorsturen naar volgende node
+        try {
+            String nextIp = node.getIpFromNodeId(node.getNextID());
+            String url = "http://" + nextIp + ":8081/api/agent/fail";
+
+            RestTemplate rest = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<FailAgent> request = new HttpEntity<>(this, headers);
+            rest.postForEntity(url, request, Void.class);
+
+            System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
+
+        } catch (Exception e) {
+            System.err.println("[FailAgent] Fout bij doorsturen naar volgende node: " + e.getMessage());
+        }
+
+
     }
 
     /**

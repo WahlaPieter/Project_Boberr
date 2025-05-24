@@ -114,40 +114,48 @@ public class NodeController {
      * Ontvangt een FailAgent, voert deze uit in een thread,
      * wacht tot het klaar is, en stuurt de agent daarna door naar de volgende node.
      */
-    @PostMapping("/agent/failure")
-    public ResponseEntity<String> receiveFailureAgent(@RequestBody FailAgent agent) {
-        try {
-            System.out.println("[FailAgent] Ontvangen op node: " + node.getNodeName());
+//    @PostMapping("/agent/failure")
+//    public ResponseEntity<String> receiveFailureAgent(@RequestBody FailAgent agent) {
+//        try {
+//            System.out.println("[FailAgent] Ontvangen op node: " + node.getNodeName());
+//
+//            // 1. Start de agent in een aparte thread
+//            Thread t = new Thread(agent);
+//            t.start();
+//            t.join(); // wacht tot de agent klaar is met run()
+//
+//            // 2. Check of agent moet stoppen (gebeurt binnen run() zelf)
+//
+//            // 3. Als agent nog leeft → stuur naar volgende node
+//            if (node.getCurrentID() != agent.getOriginNodeId()) {
+//                String nextIp = node.getIpFromNodeId(node.getNextID());
+//                String nextUrl = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
+//
+//                HttpHeaders headers = new HttpHeaders();
+//                headers.setContentType(MediaType.APPLICATION_JSON);
+//
+//                HttpEntity<FailAgent> request = new HttpEntity<>(agent, headers);
+//                RestTemplate rest = new RestTemplate();
+//                rest.postForEntity(nextUrl, request, String.class);
+//
+//                System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
+//            }
+//
+//            return ResponseEntity.ok("FailAgent uitgevoerd");
+//
+//        } catch (Exception e) {
+//            System.err.println("[FailAgent] Fout tijdens verwerking: " + e.getMessage());
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Fout");
+//        }
+//    }
 
-            // 1. Start de agent in een aparte thread
-            Thread t = new Thread(agent);
-            t.start();
-            t.join(); // wacht tot de agent klaar is met run()
 
-            // 2. Check of agent moet stoppen (gebeurt binnen run() zelf)
-
-            // 3. Als agent nog leeft → stuur naar volgende node
-            if (node.getCurrentID() != agent.getOriginNodeId()) {
-                String nextIp = node.getIpFromNodeId(node.getNextID());
-                String nextUrl = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
-
-                HttpHeaders headers = new HttpHeaders();
-                headers.setContentType(MediaType.APPLICATION_JSON);
-
-                HttpEntity<FailAgent> request = new HttpEntity<>(agent, headers);
-                RestTemplate rest = new RestTemplate();
-                rest.postForEntity(nextUrl, request, String.class);
-
-                System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
-            }
-
-            return ResponseEntity.ok("FailAgent uitgevoerd");
-
-        } catch (Exception e) {
-            System.err.println("[FailAgent] Fout tijdens verwerking: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Fout");
-        }
+    @PostMapping("/agent/fail")
+    public ResponseEntity<Void> receiveFailAgent(@RequestBody FailAgent agent) {
+        new Thread(agent).start();
+        return ResponseEntity.ok().build();
     }
+
 
 
 

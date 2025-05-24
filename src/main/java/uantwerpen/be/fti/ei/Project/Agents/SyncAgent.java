@@ -45,7 +45,7 @@ public class SyncAgent implements Runnable, Serializable {
 
     /**
      * Deze methode wordt continu uitgevoerd:
-     * - Lokale bestanden scannen
+     * - Lokale bestanden scannen via AgentUtils
      * - File list ophalen van volgende node
      * - Synchroniseren van metadata
      * - Locks controleren en eventueel aanvragen
@@ -56,14 +56,10 @@ public class SyncAgent implements Runnable, Serializable {
             try {
                 System.out.println("[SyncAgent] Synchronisatie gestart...");
 
-                // 1. Lokale bestanden detecteren
-                File folder = new File(storagePath);
-                File[] files = folder.listFiles((dir, name) -> name.endsWith(".txt"));
-                if (files != null) {
-                    for (File file : files) {
-                        String name = file.getName().replace(".txt", "");
-                        agentFileList.putIfAbsent(name, new FileEntry(name, false, currentNodeIp));
-                    }
+                // 1. Lokale bestanden detecteren via AgentUtils
+                Map<String, FileEntry> localFiles = AgentUtils.scanLocalFiles(storagePath, currentNodeIp);
+                for (Map.Entry<String, FileEntry> entry : localFiles.entrySet()) {
+                    agentFileList.putIfAbsent(entry.getKey(), entry.getValue());
                 }
 
                 // 2. File list ophalen van volgende node

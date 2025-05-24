@@ -267,7 +267,7 @@ public class Node {
             FailAgent failAgent = new FailAgent(failingNodeId, this.getCurrentID(), this);
 
             String nextIp = getIpFromNodeId(nextID);
-            String url = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
+            String url = "http://" + nextIp + ":8081/api/bootstrap/agent/fail";
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
