@@ -10,6 +10,7 @@ import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.storage.FileStorage;
 import uantwerpen.be.fti.ei.Project.storage.JsonService;
+import uantwerpen.be.fti.ei.Project.replication.ReplicationManager;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -89,6 +90,18 @@ public class NamingServer {
             String newReplicaTargetIp = getPreviousValidReplicaHolder(originalOwnerIp, ip);
             if (newReplicaTargetIp != null) {
                 moveReplicaLocation(fileName, newReplicaTargetIp, ip);
+                Path path = Paths.get("nodes_storage/" + ip + "/" + fileName);
+                if (Files.exists(path)) {
+                    try {
+                        byte[] fileData = Files.readAllBytes(path);
+                        FileReplicator.transferFile(ip, newReplicaTargetIp, fileName, fileData);
+                        registerFileReplication(fileName, originalOwnerIp, newReplicaTargetIp);
+                        System.out.println("Gerepliceerd: " + fileName + " van " + ip + " naar " + newReplicaTargetIp);
+                    } catch (IOException e) {
+                        System.err.println("Replicatie mislukt voor " + fileName + ": " + e.getMessage());
+                    }
+                }
+                System.out.println("Gerepliceerd: " + fileName + " van " + ip + " naar " + newReplicaTargetIp);
             } else {
                 System.err.println(" Geen geldige nieuwe replica-locatie gevonden voor " + fileName);
             }
@@ -127,6 +140,7 @@ public class NamingServer {
             if (ip.equals(log.getOwner())) {
                 String newOwner = getNextValidOwner(file, ip);
                 log.setOwner(newOwner);
+                log.addDownloadLocation(ip);
 
             }
         }
