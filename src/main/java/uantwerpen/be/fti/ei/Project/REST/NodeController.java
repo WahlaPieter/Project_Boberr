@@ -9,7 +9,7 @@ import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import uantwerpen.be.fti.ei.Project.replication.FileReplicator;
 import uantwerpen.be.fti.ei.Project.replication.FileTransferRequest;
 import uantwerpen.be.fti.ei.Project.replication.ReplicationManager;
-
+import uantwerpen.be.fti.ei.Project.storage.FileStorage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -122,5 +122,25 @@ public class NodeController {
                 "prev",  node.getPreviousID(),
                 "next",  node.getNextID()
         );
+    }
+
+    @PostMapping("/api/bootstrap/files/replicate")
+    public ResponseEntity<String> replicateFile(@RequestBody Map<String, String> request) {
+        String fileName = request.get("fileName");
+        String content = request.get("content");
+
+        if (fileName == null || content == null) {
+            return ResponseEntity.badRequest().body("Missing fileName or content");
+        }
+
+        try {
+            FileStorage.storeFileLocally(fileName, content); // jouw bestaande methode
+            System.out.println("Bestand gerepliceerd en opgeslagen: " + fileName);
+            return ResponseEntity.ok("Replicatie ontvangen");
+        } catch (IOException e) {
+            System.err.println(" Fout bij opslaan van gerepliceerd bestand: " + fileName);
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Opslaan mislukt");
+        }
     }
 }

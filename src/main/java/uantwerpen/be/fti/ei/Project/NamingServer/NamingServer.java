@@ -67,93 +67,56 @@ public class NamingServer {
         return true;
     }
 
-    public synchronized boolean removeNode(int hash) {
+    public synchronized boolean removeNode(int hash) throws IOException {
         Node doomed = nodeMap.get(hash);
         if (doomed == null) return false;
 
-        int prevKey = doomed.getPreviousID();
-        int nextKey = doomed.getNextID();
-        Node prev = nodeMap.get(prevKey);
-        Node next = nodeMap.get(nextKey);
         String ip = doomed.getIpAddress();
-        // update pointers
-        if (prev != null) prev.setNextID(nextKey);
-        if (next != null) next.setPreviousID(prevKey);
-        nodeMap.remove(hash);
-
         List<Map<String, String>> replicaFiles = getFilesHeldAsReplicasByNode(ip);
 
         for (Map<String, String> fileInfo : replicaFiles) {
             String fileName = fileInfo.get("fileName");
             String originalOwnerIp = fileInfo.get("originalOwnerIp");
-
             String newReplicaTargetIp = getPreviousValidReplicaHolder(originalOwnerIp, ip);
             if (newReplicaTargetIp != null) {
                 moveReplicaLocation(fileName, newReplicaTargetIp, ip);
-                Path path = Paths.get("nodes_storage/" + ip + "/" + fileName);
-                if (Files.exists(path)) {
-                    try {
-                        byte[] fileData = Files.readAllBytes(path);
-                        FileReplicator.transferFile(ip, newReplicaTargetIp, fileName, fileData);
-                        registerFileReplication(fileName, originalOwnerIp, newReplicaTargetIp);
-                        System.out.println("Gerepliceerd: " + fileName + " van " + ip + " naar " + newReplicaTargetIp);
-                    } catch (IOException e) {
-                        System.err.println("Replicatie mislukt voor " + fileName + ": " + e.getMessage());
-                    }
+                try {
+                    ReplicationManager.transferFile(ip, newReplicaTargetIp, fileName);
+                } catch (IOException e) {
+                    System.err.println("Replication failed: " + e.getMessage());
                 }
-                System.out.println("Gerepliceerd: " + fileName + " van " + ip + " naar " + newReplicaTargetIp);
-            } else {
-                System.err.println(" Geen geldige nieuwe replica-locatie gevonden voor " + fileName);
             }
         }
 
-        // let neighbours know
-        RestTemplate rt = new RestTemplate();
-        try {
-            if (prev != null) {
-                rt.postForObject("http://" + prev.getIpAddress() + ":8081/api/bootstrap/update", // Update the previous node with a new next
-                        Map.of("updatedField", 2,          // updateNext
-                                "nodeID",       nextKey),   // new next
-                        Void.class);
-            }
-            if (next != null) {
-                rt.postForObject("http://" + next.getIpAddress() + ":8081/api/bootstrap/update", // Update the next node with a new previous
-                        Map.of("updatedField", 1,          // updatePrevious
-                                "nodeID",       prevKey),   // new previous
-                        Void.class);
-            }
-        } catch (Exception e) {
-            System.err.println(" neighbour-update failed: " + e.getMessage());
-        }
+        int prevKey = doomed.getPreviousID();
+        int nextKey = doomed.getNextID();
+        Node prev = nodeMap.get(prevKey);
+        Node next = nodeMap.get(nextKey);
 
-
+        if (prev != null) prev.setNextID(nextKey);
+        if (next != null) next.setPreviousID(prevKey);
+        nodeMap.remove(hash);
 
         storedFiles.remove(ip);
         saveNodeMap();
         redistributeFiles();
         saveFileMap();
+
         for (Map.Entry<String, FileLogEntry> entry : fileLogs.entrySet()) {
             String file = entry.getKey();
             FileLogEntry log = entry.getValue();
 
-            // Als deze node de owner was, wijs een nieuwe toe
             if (ip.equals(log.getOwner())) {
                 String newOwner = getNextValidOwner(file, ip);
+                log.addDownloadLocation(ip); // <- ✅ Keep old owner
                 log.setOwner(newOwner);
-                log.addDownloadLocation(ip);
-
             }
         }
         JsonService.saveFileLogs(fileLogs);
-
-        System.out.println("File logs updated after shutdown of " + ip + ":");
-        fileLogs.forEach((file, log) -> {
-            System.out.println("  - " + file + " → owner: " + log.getOwner() + ", downloads: " + log.getDownloadLocations());
-        });
-
-        System.out.println("Node removed: " + hash);
         return true;
     }
+
+
 
     public synchronized boolean storeFile(String fileName) {
         int fileHash = HashingUtil.generateHash(fileName);
@@ -269,10 +232,26 @@ public class NamingServer {
     }
 
     private synchronized void initiateRedistributionOrReplicationDueToNewNode(Node newNodeJustAdded) {
+        // Check of sommige lokale files nog niet in fileLogs zitten (oud systeem / init node)
+        for (Map.Entry<String, Set<String>> entry : storedFiles.entrySet()) {
+            String nodeIp = entry.getKey();
+            for (String file : entry.getValue()) {
+                if (!fileLogs.containsKey(file)) {
+                    int fileHash = HashingUtil.generateHash(file);
+                    String ownerIp = findResponsibleNode(fileHash);
+                    fileLogs.put(file, new FileLogEntry(ownerIp));
+                    fileLogs.get(file).addDownloadLocation(nodeIp);
+                    System.out.println("Oude file '" + file + "' toegevoegd aan logs. Owner = " + ownerIp);
+                }
+            }
+        }
+
         System.out.println("NamingServer: Re-evaluating file ownership and replication due to new node " + newNodeJustAdded.getIpAddress());
 
         // First, ensure primary ownerships are correct (your existing redistributeFiles should handle this part)
         redistributeFiles(); // This moves files to their new *primary* owner if necessary.
+
+
 
         // After primary ownership is settled, now check for creating/updating replicas.
         // For every file that is currently "owned", see if it needs to be replicated to its designated replica node.
@@ -417,6 +396,10 @@ public class NamingServer {
                 System.err.println("NamingServer.getNodeAndPortForReplication: Could not find a distinct replica target for file hash " + fileHash + " (owner: " + ownerNode.getIpAddress() + "). All nodes might be the owner or ring is broken.");
                 return null;
             }
+        }
+        while (replicaTargetNode != null && replicaTargetNode.getIpAddress().equals(ownerNode.getIpAddress())) {
+            replicaTargetNode = nodeMap.get(replicaTargetNode.getNextID());
+            if (++attempts >= nodeMap.size()) return null;
         }
 
         System.out.println("NamingServer.getNodeAndPortForReplication: For file hash " + fileHash + " (owner: " + ownerNode.getIpAddress() + "), replication target is " + replicaTargetNode.getIpAddress() + " (ID: " + replicaTargetNode.getCurrentID() + ")");
@@ -708,14 +691,12 @@ public class NamingServer {
         Node ownerNode = getNodeByIp(originalOwnerIp);
         if (ownerNode == null) return null;
 
-        int attempts = 0;
         Node candidate = nodeMap.get(ownerNode.getPreviousID());
-        while ((candidate == null || candidate.getIpAddress().equals(excludedIp)) && attempts < nodeMap.size()) {
+        int attempts = 0;
+        while ((candidate == null || candidate.getIpAddress().equals(excludedIp) || candidate.getIpAddress().equals(originalOwnerIp)) && attempts < nodeMap.size()) {
             candidate = nodeMap.get(candidate.getPreviousID());
             attempts++;
         }
-
         return candidate != null ? candidate.getIpAddress() : null;
     }
-
 }

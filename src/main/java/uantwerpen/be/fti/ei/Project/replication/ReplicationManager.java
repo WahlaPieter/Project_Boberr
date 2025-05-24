@@ -11,6 +11,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -263,5 +264,19 @@ public class ReplicationManager {
             }
         }
         System.out.println("Node '" + nodeName + "': Finished attempting to transfer its held replicas on shutdown.");
+    }
+
+
+    public static void transferFile(String fromIp, String toIp, String fileName) throws IOException {
+        Path sourcePath = Paths.get("nodes_storage/" + fromIp + "/" + fileName);
+        Path destPath = Paths.get("nodes_storage/" + toIp + "/" + fileName);
+
+        if (Files.exists(sourcePath)) {
+            Files.createDirectories(destPath.getParent());
+            Files.copy(sourcePath, destPath, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("Bestand gekopieerd van " + fromIp + " naar " + toIp + ": " + fileName);
+        } else {
+            System.err.println("Bestand niet gevonden: " + sourcePath);
+        }
     }
 }

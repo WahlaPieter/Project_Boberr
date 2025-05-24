@@ -10,6 +10,7 @@ import uantwerpen.be.fti.ei.Project.NamingServer.HashingUtil;
 import uantwerpen.be.fti.ei.Project.NamingServer.NamingServer;
 import uantwerpen.be.fti.ei.Project.replication.FileLogEntry;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.util.List;
 import java.util.Map;
@@ -28,7 +29,7 @@ public class NamingServerController {
     }
 
     @DeleteMapping("/nodes/{hash}")
-    public ResponseEntity<?> removeNode(@PathVariable int hash) {
+    public ResponseEntity<?> removeNode(@PathVariable int hash) throws IOException {
         return namingServer.removeNode(hash) ? ResponseEntity.ok().build() : ResponseEntity.notFound().build();
     }
 

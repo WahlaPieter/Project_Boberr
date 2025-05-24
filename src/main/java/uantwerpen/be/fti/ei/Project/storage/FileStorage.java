@@ -2,6 +2,7 @@ package uantwerpen.be.fti.ei.Project.storage;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.net.InetAddress;
 import java.nio.file.*;
 import java.util.Set;
 
@@ -12,6 +13,13 @@ public class FileStorage {
         Path dir = Paths.get(BASE + ip);
         if (!Files.exists(dir)) Files.createDirectories(dir);
         Files.writeString(dir.resolve(fileName + ".txt"), content);
+    }
+    public static void storeFileLocally(String fileName, String content) throws IOException {
+        String ip = InetAddress.getLocalHost().getHostAddress();
+        Path folder = Paths.get("nodes_storage", ip);
+        Files.createDirectories(folder);
+        Path filePath = folder.resolve(fileName);
+        Files.writeString(filePath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
     }
 
     public static void moveFile(String srcIp, String dstIp, String fileName) throws IOException {
