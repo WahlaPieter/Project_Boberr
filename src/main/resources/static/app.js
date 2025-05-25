@@ -92,15 +92,40 @@ function fillHome(){
 }
 
 function fillNodesTab(){
-    const tbody = $('#tbl-nodes tbody'); tbody.innerHTML = '';
+    const tbody = $('#tbl-nodes tbody');
+    tbody.innerHTML = '';
+
     for(const n of GUI.nodes){
+        // maak een nieuwe rij
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${n.name}</td>
-            <td>${n.hash}</td>
-            <td>${n.ip}</td>
-            <td>ACTIVE</td>
-            <td></td>`;
+      <td>${n.name}</td>
+      <td>${n.hash}</td>
+      <td>${n.ip}</td>
+      <td>ACTIVE</td>
+      <td></td>
+    `;
+
+        // stop-knop
+        const port = LAUNCHER[n.ip];
+        const stopBtn = document.createElement('button');
+        stopBtn.textContent = 'Stop';
+        stopBtn.disabled = !port;  // geen tunnel => uitgeschakeld
+        stopBtn.onclick = async e => {
+            e.stopPropagation();
+            if (!confirm(`Stop node ${n.name} (${n.ip})?`)) return;
+            try {
+                await jfetch(`http://localhost:${port}/terminate`, { method: 'POST' });
+            } catch(err) {
+                alert('Stop failed: ' + err.message);
+            }
+            // herlaad de lijst even
+            setTimeout(loadNodes, 500);
+        };
+
+        // voeg knop toe in de laatste cel
+        tr.children[4].appendChild(stopBtn);
+
         tbody.append(tr);
     }
 }
