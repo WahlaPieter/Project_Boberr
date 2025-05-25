@@ -36,10 +36,19 @@ public class Node {
 
     private String nodeName;
     private String ipAddress;
+    private int httpPort;
 
     private transient ReplicationManager replicationManager;   // lab 5
     private transient FileWatcher        fileWatcher;          // lab 5
     private transient CompletableFuture<Integer> nodeCountFuture = new CompletableFuture<>();
+
+    public Node() { }
+
+    public Node(int currentID, String nodeName, String ipAddress) {
+        this.currentID = currentID;
+        this.nodeName = nodeName;
+        this.ipAddress = ipAddress;
+    }
 
     @Autowired
     private transient RestTemplate rest;

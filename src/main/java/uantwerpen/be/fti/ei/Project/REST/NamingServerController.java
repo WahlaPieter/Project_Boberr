@@ -23,7 +23,7 @@ public class NamingServerController {
     private NamingServer namingServer;
 
     @PostMapping("/nodes")
-    public ResponseEntity<?> addNode(@RequestBody Map<String, String> req) {
+    public ResponseEntity<?> addNode(@RequestBody Map<String, String> req) throws IOException {
         boolean ok = namingServer.addNode(req.get("nodeName"), req.get("ipAddress"));
         return ok ? ResponseEntity.ok(Map.of("status","ok")) : ResponseEntity.status(409).body(Map.of("error","exists"));
     }

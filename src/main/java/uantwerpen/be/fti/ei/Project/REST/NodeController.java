@@ -1,6 +1,7 @@
 package uantwerpen.be.fti.ei.Project.REST;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,8 @@ import java.util.Map;
 @RequestMapping("/api/bootstrap")
 @Profile("node")
 public class NodeController {
+    @Value("${storage.dir}")
+    private String storageDir;
 
     @Autowired
     private Node node;
@@ -134,7 +137,7 @@ public class NodeController {
         }
 
         try {
-            FileStorage.storeFileLocally(fileName, content); // jouw bestaande methode
+            FileStorage.storeFileLocally(storageDir, fileName, content); // jouw bestaande methode
             System.out.println("Bestand gerepliceerd en opgeslagen: " + fileName);
             return ResponseEntity.ok("Replicatie ontvangen");
         } catch (IOException e) {

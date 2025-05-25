@@ -24,6 +24,27 @@ public class FileReplicator {
         }
     }
 
+    public static void transfer(String srcIp, String destIp, String fileName, String storageDir) throws IOException {
+        Path file = Paths.get(storageDir, fileName);
+        if (!Files.exists(file)) {
+            throw new FileNotFoundException("File not found on source: " + file);
+        }
+        try (Socket socket = new Socket(destIp, 8082);
+             OutputStream out = socket.getOutputStream();
+             FileInputStream in = new FileInputStream(file.toFile())) {
+            // write header
+            PrintWriter pw = new PrintWriter(out, true);
+            pw.println(fileName);
+            pw.println(Files.size(file));
+            pw.flush();
+            // stream file data
+            byte[] buf = new byte[8192];
+            int r;
+            while ((r = in.read(buf)) != -1) out.write(buf, 0, r);
+            out.flush();
+        }
+    }
+
     public static byte[] receiveFile(InputStream in) throws IOException {
         try (DataInputStream dis = new DataInputStream(in);
              ByteArrayOutputStream baos = new ByteArrayOutputStream()) {

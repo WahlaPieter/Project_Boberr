@@ -14,12 +14,27 @@ public class FileStorage {
         if (!Files.exists(dir)) Files.createDirectories(dir);
         Files.writeString(dir.resolve(fileName + ".txt"), content);
     }
-    public static void storeFileLocally(String fileName, String content) throws IOException {
-        String ip = InetAddress.getLocalHost().getHostAddress();
-        Path folder = Paths.get("nodes_storage", ip);
-        Files.createDirectories(folder);
-        Path filePath = folder.resolve(fileName);
-        Files.writeString(filePath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+//    public static void storeFileLocally(String fileName, String content) throws IOException {
+//        String ip = InetAddress.getLocalHost().getHostAddress();
+//        Path folder = Paths.get("nodes_storage", ip);
+//        Files.createDirectories(folder);
+//        Path filePath = folder.resolve(fileName);
+//        Files.writeString(filePath, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+//    }
+
+
+    public static void storeFileLocally(String storageDir, String fileName, String content) throws IOException {
+        Path dir = Paths.get(storageDir);
+        if (!Files.exists(dir)) Files.createDirectories(dir);
+        Path file = dir.resolve(fileName);
+        Files.writeString(file, content, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+    }
+
+    /** Read the raw bytes of a stored file. */
+    public static byte[] readContent(String storageDir, String fileName) throws IOException {
+        Path file = Paths.get(storageDir, fileName);
+        if (!Files.exists(file)) throw new FileNotFoundException("File not found: " + file);
+        return Files.readAllBytes(file);
     }
 
     public static void moveFile(String srcIp, String dstIp, String fileName) throws IOException {
