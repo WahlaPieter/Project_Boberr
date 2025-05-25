@@ -161,26 +161,30 @@ public class Node {
             }
         }).start();
 
-        // Start SyncAgent
+        // Start SyncAgent with valid nextNode IP check
         try {
             String nextNodeIp = getIpFromNodeId(nextID);
-            String nextNodeUrl = "http://" + nextNodeIp + ":8081";
 
-            SyncAgent syncAgent = new SyncAgent(ipAddress, nextNodeUrl, "nodes_storage/" + ipAddress, rest, namingServerUrl);
-            Thread syncThread = new Thread(syncAgent);
-            syncThread.setDaemon(true);
-            syncThread.start();
-
-            System.out.println("[Node] SyncAgent gestart op " + ipAddress + " → synchroniseert met " + nextNodeIp);
+            if (nextNodeIp != null && !nextNodeIp.equals(ipAddress)) {
+                String nextNodeUrl = "http://" + nextNodeIp + ":8081";
+                SyncAgent syncAgent = new SyncAgent(ipAddress, nextNodeUrl, "nodes_storage/" + ipAddress, rest, namingServerUrl);
+                Thread syncThread = new Thread(syncAgent);
+                syncThread.setDaemon(true);
+                syncThread.start();
+                System.out.println("[Node] SyncAgent started on " + ipAddress + " → synchronises with " + nextNodeIp);
+            } else {
+                System.out.println("[Node] SyncAgent not started: nextNode IP unknown or equal to myself");
+            }
         } catch (Exception e) {
-            System.err.println("[Node] Fout bij starten van SyncAgent: " + e.getMessage());
+            System.err.println("[Node] Error when starting SyncAgent: " + e.getMessage());
         }
-        // Start de failureagent
+
+        // Start the faileagent
         FailureMonitor monitor = new FailureMonitor(this, rest);
         Thread failMonitorThread = new Thread(monitor);
         failMonitorThread.setDaemon(true);
         failMonitorThread.start();
-        System.out.println("[Node] FailureMonitor gestart om next node te controleren.");
+        System.out.println("[Node] FailureMonitor launched to check next node.");
 
     }
 
@@ -255,14 +259,14 @@ public class Node {
             Map<String, Object> response = rest.getForObject(url, Map.class);
             return (String) response.get("ipAddress");
         } catch (Exception e) {
-            System.err.println("[Node] Fout bij ophalen van IP voor nodeID " + nodeId + ": " + e.getMessage());
-            return "127.0.0.1";
+            System.err.println("[Node] Error retrieving IP for nodeID " + nodeId + ": " + e.getMessage());
+            return null;
         }
     }
 
     public void simulateFailureDetection(int failingNodeId) {
         try {
-            System.out.println("[TEST] Failure gedetecteerd bij nodeID: " + failingNodeId);
+            System.out.println("[TEST] Failure detected at nodeID: " + failingNodeId);
 
             FailAgent failAgent = new FailAgent(failingNodeId, this.getCurrentID(), this);
 
@@ -276,9 +280,9 @@ public class Node {
             RestTemplate rest = new RestTemplate();
             rest.postForEntity(url, request, String.class);
 
-            System.out.println("[TEST] FailAgent gestart en verzonden naar: " + nextIp);
+            System.out.println("[TEST] FailAgent started and sent to: " + nextIp);
         } catch (Exception e) {
-            System.err.println("[TEST] Fout bij starten van FailAgent: " + e.getMessage());
+            System.err.println("[TEST] Error when starting FailAgent: " + e.getMessage());
         }
     }
 

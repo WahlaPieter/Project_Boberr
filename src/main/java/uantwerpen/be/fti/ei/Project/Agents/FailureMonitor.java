@@ -7,11 +7,6 @@ import uantwerpen.be.fti.ei.Project.Bootstrap.Node;
 import java.io.Serializable;
 import java.util.Map;
 
-/**
- * Monitor die periodiek de volgende node controleert.
- * Bij detectie van failure wordt automatisch een FailAgent gestart.
- */
-
 public class FailureMonitor implements Runnable, Serializable {
     private final Node node;
     private final RestTemplate rest;
@@ -30,16 +25,16 @@ public class FailureMonitor implements Runnable, Serializable {
 
                 ResponseEntity<Map> response = rest.getForEntity(url, Map.class);
                 if (response.getStatusCode().is2xxSuccessful()) {
-                    System.out.println("[FailMonitor] Next node bereikbaar: " + nextIp);
+                    System.out.println("[FailMonitor] Next node reachable: " + nextIp);
                 }
 
             } catch (Exception e) {
-                System.err.println("[FailMonitor] ❗ Next node lijkt offline: " + node.getNextID());
+                System.err.println("[FailMonitor] Next node appears offline: " + node.getNextID());
 
-                // FailAgent starten op huidige node
+                // Starting FailAgent on current node
                 node.simulateFailureDetection(node.getNextID());
 
-                // Sla tijdelijk wachttijd over zodat niet meerdere FailAgents worden gestart
+                // Skip temporary wait time so multiple FailAgents are not started
                 try {
                     Thread.sleep(15000); // cooldown
                 } catch (InterruptedException ignored) {}
@@ -48,7 +43,7 @@ public class FailureMonitor implements Runnable, Serializable {
             }
 
             try {
-                Thread.sleep(5000); // check elke 5 seconden
+                Thread.sleep(5000); // check each 5 sec
             } catch (InterruptedException ignored) {}
         }
     }

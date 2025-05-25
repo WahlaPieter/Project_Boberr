@@ -89,15 +89,19 @@ public class NodeController {
      * @return HTTP 200 OK bij succes, 409 als al gelockt, 404 als niet gevonden
      */
     @PostMapping("/agent/lock")
-    public ResponseEntity<String> lockFile(@RequestBody LockRequest request) {
+    public ResponseEntity<String> handleLockAction(@RequestBody LockRequest request) {
         String filename = request.getFilename();
+        String action = request.getAction();
 
-        node.updateFileListFromDisk(); // Werk file list bij met eventuele nieuwe bestanden
-
+        node.updateFileListFromDisk();
         Map<String, FileEntry> fileList = node.getLocalFileList();
 
-        if (fileList.containsKey(filename)) {
-            FileEntry entry = fileList.get(filename);
+        FileEntry entry = fileList.get(filename);
+        if (entry == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Bestand niet gevonden");
+        }
+
+        if ("LOCK".equalsIgnoreCase(action)) {
             if (!entry.isLocked()) {
                 entry.setLocked(true);
                 System.out.println("[LOCK] Bestand gelockt: " + filename + " op verzoek van " + request.getRequesterIp());
@@ -105,52 +109,20 @@ public class NodeController {
             } else {
                 return ResponseEntity.status(HttpStatus.CONFLICT).body("Bestand is al gelockt");
             }
+        } else if ("UNLOCK".equalsIgnoreCase(action)) {
+            if (entry.isLocked()) {
+                entry.setLocked(false);
+                System.out.println("[UNLOCK] Lock vrijgegeven voor: " + filename);
+                return ResponseEntity.ok("Unlock geaccepteerd");
+            } else {
+                return ResponseEntity.status(HttpStatus.CONFLICT).body("Bestand was al niet gelockt");
+            }
         }
 
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Bestand niet gevonden");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Ongeldige actie");
     }
 
-    /**
-     * Ontvangt een FailAgent, voert deze uit in een thread,
-     * wacht tot het klaar is, en stuurt de agent daarna door naar de volgende node.
-     */
-//    @PostMapping("/agent/failure")
-//    public ResponseEntity<String> receiveFailureAgent(@RequestBody FailAgent agent) {
-//        try {
-//            System.out.println("[FailAgent] Ontvangen op node: " + node.getNodeName());
-//
-//            // 1. Start de agent in een aparte thread
-//            Thread t = new Thread(agent);
-//            t.start();
-//            t.join(); // wacht tot de agent klaar is met run()
-//
-//            // 2. Check of agent moet stoppen (gebeurt binnen run() zelf)
-//
-//            // 3. Als agent nog leeft → stuur naar volgende node
-//            if (node.getCurrentID() != agent.getOriginNodeId()) {
-//                String nextIp = node.getIpFromNodeId(node.getNextID());
-//                String nextUrl = "http://" + nextIp + ":8081/api/bootstrap/agent/failure";
-//
-//                HttpHeaders headers = new HttpHeaders();
-//                headers.setContentType(MediaType.APPLICATION_JSON);
-//
-//                HttpEntity<FailAgent> request = new HttpEntity<>(agent, headers);
-//                RestTemplate rest = new RestTemplate();
-//                rest.postForEntity(nextUrl, request, String.class);
-//
-//                System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
-//            }
-//
-//            return ResponseEntity.ok("FailAgent uitgevoerd");
-//
-//        } catch (Exception e) {
-//            System.err.println("[FailAgent] Fout tijdens verwerking: " + e.getMessage());
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Fout");
-//        }
-//    }
-
-
-    @PostMapping("/agent/fail")
+        @PostMapping("/agent/fail")
     public ResponseEntity<Void> receiveFailAgent(@RequestBody FailAgent agent) {
         new Thread(agent).start();
         return ResponseEntity.ok().build();

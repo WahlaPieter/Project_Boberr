@@ -10,11 +10,6 @@ import java.io.File;
 import java.io.Serializable;
 import java.util.*;
 
-/**
- * SyncAgent draait continu op een node en synchroniseert periodiek
- * de bestanden en lock-status met de volgende node in de ring.
- * Daarnaast kan hij locks verspreiden naar alle nodes via REST.
- */
 public class SyncAgent implements Runnable, Serializable {
 
     private final String currentNodeIp;
@@ -25,15 +20,6 @@ public class SyncAgent implements Runnable, Serializable {
 
     private final Map<String, FileEntry> agentFileList;
 
-    /**
-     * Constructor voor SyncAgent.
-     *
-     * @param currentNodeIp     IP van deze node
-     * @param nextNodeUrl       URL van de volgende node (bv. http://192.168.1.2:8081)
-     * @param storagePath       Pad naar de lokale opslagfolder
-     * @param restTemplate      RestTemplate voor HTTP-verkeer
-     * @param namingServerUrl   URL van de naming server om IP’s op te halen
-     */
     public SyncAgent(String currentNodeIp, String nextNodeUrl, String storagePath, RestTemplate restTemplate, String namingServerUrl) {
         this.currentNodeIp = currentNodeIp;
         this.nextNodeUrl = nextNodeUrl;
@@ -44,25 +30,25 @@ public class SyncAgent implements Runnable, Serializable {
     }
 
     /**
-     * Deze methode wordt continu uitgevoerd:
-     * - Lokale bestanden scannen via AgentUtils
-     * - File list ophalen van volgende node
-     * - Synchroniseren van metadata
-     * - Locks controleren en eventueel aanvragen
+     * This method runs continuously:
+     * - Scan local files via AgentUtils
+     * - Retrieve file list from next node
+     * - Synchronising metadata
+     * - Checking locks and requesting them if necessary
      */
     @Override
     public void run() {
         while (true) {
             try {
-                System.out.println("[SyncAgent] Synchronisatie gestart...");
+                System.out.println("[SyncAgent] Synchronisation started...");
 
-                // 1. Lokale bestanden detecteren via AgentUtils
+                // Detecting local files via AgentUtils
                 Map<String, FileEntry> localFiles = AgentUtils.scanLocalFiles(storagePath, currentNodeIp);
                 for (Map.Entry<String, FileEntry> entry : localFiles.entrySet()) {
                     agentFileList.putIfAbsent(entry.getKey(), entry.getValue());
                 }
 
-                // 2. File list ophalen van volgende node
+                // Retrieve file list from next node
                 ResponseEntity<Map<String, FileEntry>> response = restTemplate.exchange(
                         nextNodeUrl + "/api/agent/filelist",
                         HttpMethod.GET,
@@ -71,49 +57,51 @@ public class SyncAgent implements Runnable, Serializable {
                 );
                 Map<String, FileEntry> remoteList = response.getBody();
 
-                // 3. Lijsten vergelijken
+                // Compare lists
                 for (Map.Entry<String, FileEntry> entry : remoteList.entrySet()) {
                     agentFileList.putIfAbsent(entry.getKey(), entry.getValue());
                 }
 
-                // 4. Lock-check en update agentFileList indien nodig
+                // Lock-check and update agentFileList if necessary
                 for (Map.Entry<String, FileEntry> entry : agentFileList.entrySet()) {
                     FileEntry entryInAgentList = entry.getValue();
                     String filename = entryInAgentList.getFilename();
                     File localFile = new File(storagePath + "/" + filename + ".txt");
 
                     if (localFile.exists()) {
-                        boolean shouldBeLocked = filename.contains("lock_me");
+                        boolean shouldLock = filename.contains("lock_me"); // Simulate writing action
 
-                        if (shouldBeLocked && !entryInAgentList.isLocked()) {
+                        if (shouldLock && !entryInAgentList.isLocked()) {
+                            System.out.println("[SyncAgent] Lock required for: " + filename);
+
+                            // Apply a LOCK to all other nodes
+                            List<String> allIps = fetchAllNodeIps();
+                            requestLock(filename, allIps);
+
+                            // Also set the lock locally
                             entryInAgentList.setLocked(true);
-                            System.out.println("[SyncAgent] LOCK toegevoegd aan agentlijst voor: " + filename);
+                            System.out.println("[SyncAgent] LOCK assigned for local file: " + filename);
                         }
 
                         if (entryInAgentList.isLocked()) {
-                            System.out.println("[SyncAgent] Bestand is gelockt: " + filename + " → geen bewerking toegestaan.");
+                            System.out.println("[SyncAgent] File is locked: " + filename + " → no editing allowed.");
                         }
+
+
                     }
                 }
 
-                // 5. Simulatie: lock aanvragen voor "rapport" als het niet gelockt is
-                String targetFile = "rapport";
-                File testFile = new File(storagePath + "/" + targetFile + ".txt");
-                if (testFile.exists() && !agentFileList.getOrDefault(targetFile, new FileEntry(targetFile, false, currentNodeIp)).isLocked()) {
-                    List<String> allIps = fetchAllNodeIps();
-                    requestLock(targetFile, allIps);
-                }
 
                 Thread.sleep(5000);
 
             } catch (Exception e) {
-                System.err.println("[SyncAgent] Fout tijdens synchronisatie: " + e.getMessage());
+                System.err.println("[SyncAgent] Error during synchronisation: " + e.getMessage());
             }
         }
     }
 
     /**
-     * Haalt alle node-IP’s op van de naming server, exclusief deze node zelf.
+     * Retrieves all node IPs from the naming server, excluding this node itself.
      */
     public List<String> fetchAllNodeIps() {
         try {
@@ -135,19 +123,20 @@ public class SyncAgent implements Runnable, Serializable {
             return ips;
 
         } catch (Exception e) {
-            System.err.println("[SyncAgent] Fout bij ophalen IP’s: " + e.getMessage());
+            System.err.println("[SyncAgent] Error retrieving IPs: " + e.getMessage());
             return List.of();
         }
     }
 
     /**
-     * Vraagt een lock aan bij alle nodes voor het opgegeven bestand.
+     * Requests a lock on all nodes for the specified file.
      *
-     * @param filename    de bestandsnaam waarvoor een lock wordt aangevraagd
-     * @param allNodeIps  lijst van IP’s van alle andere nodes
+     * @param filename    the file name for which a lock is requested
+     * @param allNodeIps  list of IPs of all other nodes
      */
     public void requestLock(String filename, List<String> allNodeIps) {
-        LockRequest req = new LockRequest(filename, currentNodeIp);
+        LockRequest req = new LockRequest(filename, currentNodeIp, "LOCK");
+        req.setAction("LOCK");
 
         for (String ip : allNodeIps) {
             try {
@@ -158,13 +147,14 @@ public class SyncAgent implements Runnable, Serializable {
                 HttpEntity<LockRequest> request = new HttpEntity<>(req, headers);
 
                 ResponseEntity<String> response = restTemplate.postForEntity(url, request, String.class);
-                System.out.println("[LockRequest] Lock gevraagd aan " + ip + ": " + response.getStatusCode());
+                System.out.println("[LockRequest] Lock requested to " + ip + ": " + response.getStatusCode());
 
             } catch (Exception e) {
-                System.err.println("[LockRequest] Fout bij verzenden naar " + ip + ": " + e.getMessage());
+                System.err.println("[LockRequest] Error sending to " + ip + ": " + e.getMessage());
             }
         }
     }
+
 
     public Map<String, FileEntry> getAgentFileList() {
         return agentFileList;

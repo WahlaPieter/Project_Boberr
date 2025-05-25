@@ -16,22 +16,16 @@ import java.io.Serializable;
 import java.util.Map;
 
 /**
- * Failure Agent wordt opgestart wanneer een node faalt.
- * Hij reist rond in de ring en handelt bestanden van de falende node af:
- * - Als de volgende node het bestand niet heeft: verstuur bestand
- * - Als de volgende node het al heeft: update alleen metadata
+ * Failure Agent is started when a node fails.
+ * It travels around the ring and handles files from the failing node:
+ * - If the next node does not have the file: send file
+ * - If the next node already has it: update metadata only
  */
 public class FailAgent implements Runnable, Serializable {
     private final int failingNodeId;
     private final int originNodeId;
     private final Node node;
 
-    /**
-     * Constructor voor FailAgent.
-     * @param failingNodeId ID van de node die is uitgevallen
-     * @param originNodeId ID van de node die de agent heeft gestart
-     * @param node Referentie naar de huidige actieve node
-     */
     public FailAgent(int failingNodeId, int originNodeId, Node node) {
         this.failingNodeId = failingNodeId;
         this.originNodeId = originNodeId;
@@ -39,35 +33,34 @@ public class FailAgent implements Runnable, Serializable {
     }
 
     /**
-     * Hoofdlogica van de agent. Wordt uitgevoerd wanneer hij op een node toekomt:
-     * - Scant bestanden lokaal
-     * - Herverdeelt bestanden waarvan de eigenaar de falende node is
-     * - Stuurt agent door naar volgende node tenzij we terug op start zijn
+     * Principal agent logic. Runs when it arrives on a node:
+     * - Scans files locally
+     * - Redistributes files whose owner is the failing node
+     * - Forwards agent to next node unless we are back at startup
      */
     @Override
     public void run() {
-        System.out.println("[FailAgent] Actief op node: " + node.getNodeName());
+        System.out.println("[FailAgent] Active on node: " + node.getNodeName());
 
-        // Stap 1: haal lokale filelist op
+        // Retrieve local filelist
         node.updateFileListFromDisk();
         Map<String, FileEntry> fileList = node.getLocalFileList();
 
         for (Map.Entry<String, FileEntry> entry : fileList.entrySet()) {
             FileEntry file = entry.getValue();
 
-            // Stap 2: is dit bestand eigendom van de falende node?
-            if (file.getOwnerIp().equals(getIpOfNodeId(failingNodeId))) {
+            // Is this file owned by the failing node?
+            if (file.getOwnerIp().equals(node.getIpFromNodeId(failingNodeId))) {
 
-                System.out.println("[FailAgent] Bestand gevonden van falende node: " + file.getFilename());
+                System.out.println("[FailAgent] File found from failing node: " + file.getFilename());
 
-                // Option 1 / Option 2 moeten hier nog uitgewerkt worden (file transfer vs log update)
-                // TODO: check of de volgende eigenaar het bestand al heeft
+                // Option 1 / Option 2, (file transfer vs log update)
                 String filename = file.getFilename();
                 String fullPath = "nodes_storage/" + node.getIpAddress() + "/" + filename + ".txt";
                 File localFile = new File(fullPath);
 
                 if (localFile.exists()) {
-                    // 📨 Controleer of de volgende node dit bestand al heeft
+                    // Check whether the next node already has this file
                     String nextIp = node.getIpFromNodeId(node.getNextID());
                     String checkUrl = "http://" + nextIp + ":8081/api/bootstrap/agent/filelist";
 
@@ -83,7 +76,7 @@ public class FailAgent implements Runnable, Serializable {
                         Map<String, FileEntry> nextFileList = response.getBody();
 
                         if (nextFileList != null && !nextFileList.containsKey(filename)) {
-                            // 🔄 Option 1: bestand bestaat NIET → verstuur het
+                            // Option 1: file does NOT exist → send it
                             System.out.println("[FailAgent] Bestand wordt verstuurd naar: " + nextIp);
 
                             byte[] fileBytes = Files.readAllBytes(localFile.toPath());
@@ -97,29 +90,29 @@ public class FailAgent implements Runnable, Serializable {
                             rest.postForEntity("http://" + nextIp + ":8081/api/bootstrap/files/receive", entity, String.class);
 
                         } else {
-                            // 📝 Option 2: bestand bestaat al → alleen metadata bijwerken
-                            System.out.println("[FailAgent] Bestand bestaat al op volgende node → enkel log bijgewerkt");
+                            // Option 2: file already exists → update metadata only
+                            System.out.println("[FailAgent] File already exists on next node → only log updated");
                         }
 
-                        // 🔄 In beide gevallen: update local metadata (nieuwe eigenaar)
+                        // In both cases: update local metadata (new owner)
                         file.setOwnerIp(node.getIpAddress());
 
                     } catch (Exception e) {
-                        System.err.println("[FailAgent] Fout bij herverdeling bestand: " + e.getMessage());
+                        System.err.println("[FailAgent] Error on file redistribution: " + e.getMessage());
                     }
                 }
-                // Voor nu gewoon log:
-                System.out.println("[FailAgent] Log: bestand '" + file.getFilename() + "' had eigenaar " + file.getOwnerIp());
+                // For now, just log:
+                System.out.println("[FailAgent] Log: file '" + file.getFilename() + "' had owner " + file.getOwnerIp());
             }
         }
 
-        // Stap 3: stoppen als we terug zijn op de startnode
+        // stop when we are back at the startnode
         if (node.getCurrentID() == originNodeId) {
-            System.out.println("[FailAgent] Terug op oorspronkelijke node → stop agent.");
+            System.out.println("[FailAgent] Back on original node → stop agent.");
             return;
         }
 
-        // Stap 4: Agent doorsturen naar volgende node
+        // Forward agent to next node
         try {
             String nextIp = node.getIpFromNodeId(node.getNextID());
             String url = "http://" + nextIp + ":8081/api/agent/fail";
@@ -131,24 +124,13 @@ public class FailAgent implements Runnable, Serializable {
             HttpEntity<FailAgent> request = new HttpEntity<>(this, headers);
             rest.postForEntity(url, request, Void.class);
 
-            System.out.println("[FailAgent] Doorgestuurd naar volgende node: " + nextIp);
+            System.out.println("[FailAgent] Forwarded to next node: " + nextIp);
 
         } catch (Exception e) {
-            System.err.println("[FailAgent] Fout bij doorsturen naar volgende node: " + e.getMessage());
+            System.err.println("[FailAgent] Error on forwarding to next node: " + e.getMessage());
         }
 
-
     }
-
-    /**
-     * Simulatie van IP lookup van een node ID
-     * (wordt later vervangen door echte lookup via naming server)
-     */
-    private String getIpOfNodeId(int nodeId) {
-        // Simuleer mapping: kan vervangen worden met echte lookup
-        return "192.168.0." + (nodeId % 256); // enkel tijdelijk voor tests
-    }
-
 
     public int getOriginNodeId() {
         return originNodeId;
