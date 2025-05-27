@@ -85,7 +85,7 @@ public class NamingServer {
                         Void.class);
             }
         } catch (Exception e) {
-            System.err.println("⚠️  neighbour-update failed: " + e.getMessage());
+            System.err.println("neighbour-update failed: " + e.getMessage());
         }
 
 
